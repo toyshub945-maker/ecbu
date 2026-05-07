@@ -48,5 +48,10 @@ yarn-error.log*
 *.tsbuildinfo
 frontend/tsconfig.tsbuildinfo
 
+# Generated output files
+*.xlsx
+db_dump.json
+debug_log*.txt
+
 # Docker
 *.pid
