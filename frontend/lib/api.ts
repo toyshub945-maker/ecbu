@@ -1,7 +1,9 @@
 const BASE =
-  typeof window !== "undefined"
-    ? `${window.location.protocol}//${window.location.hostname}:8000/api`
-    : "http://localhost:8000/api";
+  process.env.NEXT_PUBLIC_BACKEND_URL
+    ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/api`
+    : typeof window !== "undefined"
+      ? `${window.location.protocol}//${window.location.hostname}:8000/api`
+      : "http://localhost:8000/api";
 
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
