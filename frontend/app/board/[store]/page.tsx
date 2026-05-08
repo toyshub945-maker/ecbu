@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
@@ -46,6 +46,7 @@ function EditCell({
   onSave: (v: number | null) => void;
   prefix?: string; suffix?: string; isPercent?: boolean;
 }) {
+  const { theme: t } = useTheme();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -76,7 +77,7 @@ function EditCell({
         onChange={e => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }}
-        className="w-full text-right text-xs border border-violet-400 rounded px-1 py-0.5 focus:outline-none bg-white"
+        className={`w-full text-right text-xs border border-violet-400 rounded px-1 py-0.5 focus:outline-none ${t.inp}`}
         style={{ minWidth: 60 }}
       />
     );
@@ -86,7 +87,7 @@ function EditCell({
     <span
       onClick={startEdit}
       title="Click to edit"
-      className="cursor-pointer hover:bg-violet-50 rounded px-1 py-0.5 transition-colors select-none"
+      className={`cursor-pointer hover:bg-violet-500/10 rounded px-1 py-0.5 transition-colors select-none`}
     >
       {display}
     </span>
@@ -99,6 +100,7 @@ function MetricsModal({
 }: {
   product: Product; periodId: number; storeCode: string; onClose: () => void; onSaved: () => void;
 }) {
+  const { theme: t } = useTheme();
   const a = product.analytics;
   const tk = product.tk_export;
   type Fields = { [k: string]: string };
@@ -239,18 +241,18 @@ function MetricsModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className={`${t.card} rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col`}>
+        <div className={`flex items-center justify-between px-6 py-4 border-b ${t.divider}`}>
           <div>
-            <h3 className="font-semibold text-gray-900">All Metrics — Product {product.product_no}</h3>
-            {product.warehouse_name && <p className="text-xs text-gray-400 mt-0.5">{product.warehouse_name}</p>}
+            <h3 className={`font-semibold ${t.t1}`}>All Metrics — Product {product.product_no}</h3>
+            {product.warehouse_name && <p className={`text-xs ${t.t4} mt-0.5`}>{product.warehouse_name}</p>}
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+          <button onClick={onClose} className={`${t.t4} hover:${t.t1} text-xl`}>×</button>
         </div>
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
-          <div className="mb-6 border border-gray-100 rounded-xl p-4 bg-gray-50/50">
-            <h4 className="text-xs font-bold text-gray-500 uppercase mb-4 text-center">Historical Trends</h4>
+          <div className={`mb-6 border ${t.divider} rounded-xl p-4 ${t.card2}`}>
+            <h4 className={`text-xs font-bold ${t.t4} uppercase mb-4 text-center`}>Historical Trends</h4>
             {history.length > 0 ? (
               <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
@@ -269,30 +271,30 @@ function MetricsModal({
                 </ResponsiveContainer>
               </div>
             ) : (
-              <div className="flex items-center justify-center h-32 text-gray-400 text-sm">
+              <div className={`flex items-center justify-center h-32 ${t.t4} text-sm`}>
                 No historical data available for this product yet.
               </div>
             )}
           </div>
-          
+
           {METRIC_GROUPS.map(group => (
             <div key={group.label}>
-              <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">{group.label}</h4>
+              <h4 className={`text-xs font-bold ${t.t4} uppercase mb-2`}>{group.label}</h4>
               <div className="grid grid-cols-2 gap-2">
                 {group.fields.map(f => {
                   const fromTk = TK_SOURCED_FIELDS.has(f.key) && (product.analytics as any)?.[f.key] == null && fields[f.key] !== "";
                   const fromPricing = PRICING_SOURCED_FIELDS.has(f.key) && (product.analytics as any)?.[f.key] == null && fields[f.key] !== "";
                   return (
                     <div key={f.key}>
-                      <label className="text-xs text-gray-500 block mb-0.5 flex items-center gap-1">
-                        {f.label}{f.note ? <span className="text-gray-400 ml-1">({f.note})</span> : ""}
+                      <label className={`text-xs ${t.t3} block mb-0.5 flex items-center gap-1`}>
+                        {f.label}{f.note ? <span className={`${t.t4} ml-1`}>({f.note})</span> : ""}
                         {fromTk && <span className="bg-sky-100 text-sky-600 px-1 py-0 rounded text-[9px] font-bold ml-1">TK</span>}
                         {fromPricing && <span className="bg-emerald-100 text-emerald-600 px-1 py-0 rounded text-[9px] font-bold ml-1">P</span>}
                       </label>
                       <input
                         value={fields[f.key] ?? ""}
                         onChange={e => setFields(prev => ({ ...prev, [f.key]: e.target.value }))}
-                        className={`w-full border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 ${fromTk ? "border-sky-200 bg-sky-50/40" : fromPricing ? "border-emerald-200 bg-emerald-50/40" : "border-gray-200"}`}
+                        className={`w-full border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 ${t.inp} ${fromTk ? "border-sky-500/30" : fromPricing ? "border-emerald-500/30" : ""}`}
                         placeholder="–"
                       />
                     </div>
@@ -305,7 +307,7 @@ function MetricsModal({
           {/* TikTok Export Analytics section */}
           {product.tk_export && (
             <div>
-              <h4 className="text-xs font-bold text-gray-400 uppercase mb-2 flex items-center gap-2">
+              <h4 className={`text-xs font-bold ${t.t4} uppercase mb-2 flex items-center gap-2`}>
                 TikTok Export Data
                 <span className="bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded text-[10px] font-semibold normal-case">
                   {product.tk_export.listing_status ?? "—"}
@@ -336,17 +338,17 @@ function MetricsModal({
                 ].map(m => (
                   <div key={m.label} className="bg-blue-50/40 rounded-lg p-2 border border-blue-100/50">
                     <div className="text-[10px] text-blue-600 font-semibold uppercase tracking-wider mb-0.5">{m.label}</div>
-                    <div className="text-sm font-bold text-gray-900">{m.val}</div>
+                    <div className={`text-sm font-bold ${t.t1}`}>{m.val}</div>
                   </div>
                 ))}
               </div>
             </div>
           )}
         </div>
-        <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
+        <div className={`px-6 py-4 border-t ${t.divider} flex justify-end gap-3`}>
+          <button onClick={onClose} className={`px-4 py-2 text-sm ${t.btnAlt} rounded-lg`}>Cancel</button>
           <button onClick={save} disabled={saving}
-            className="px-4 py-2 text-sm bg-violet-600 text-white font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50">
+            className={`px-4 py-2 text-sm ${t.btn} rounded-lg font-medium disabled:opacity-50`}>
             {saving ? "Saving…" : "Save All Metrics"}
           </button>
         </div>
@@ -361,6 +363,7 @@ function NotesModal({
 }: {
   product: Product; periodId: number; storeCode: string; onClose: () => void; onSaved: () => void;
 }) {
+  const { theme: t } = useTheme();
   const [analysis, setAnalysis] = useState(product.notes?.analysis ?? "");
   const [action, setAction] = useState(product.notes?.action ?? "");
   const [results, setResults] = useState(product.notes?.results ?? "");
@@ -375,27 +378,27 @@ function NotesModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className={`${t.card} rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col`}>
+        <div className={`flex items-center justify-between px-6 py-4 border-b ${t.divider}`}>
           <div>
-            <h3 className="font-semibold text-gray-900">Notes — Product {product.product_no}</h3>
-            {product.warehouse_name && <p className="text-xs text-gray-400 mt-0.5">{product.warehouse_name}</p>}
+            <h3 className={`font-semibold ${t.t1}`}>Notes — Product {product.product_no}</h3>
+            {product.warehouse_name && <p className={`text-xs ${t.t4} mt-0.5`}>{product.warehouse_name}</p>}
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+          <button onClick={onClose} className={`${t.t4} hover:${t.t1} text-xl`}>×</button>
         </div>
         <div className="p-6 flex-1 overflow-y-auto space-y-4">
           {[["Intelligent Analysis", analysis, setAnalysis, 4], ["Action", action, setAction, 3], ["Results", results, setResults, 3]] .map(([label, val, setter, rows]) => (
             <div key={label as string}>
-              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">{label as string}</label>
+              <label className={`block text-xs font-semibold ${t.t3} uppercase mb-1.5`}>{label as string}</label>
               <textarea value={val as string} onChange={e => (setter as (v:string)=>void)(e.target.value)} rows={rows as number}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-violet-400" />
+                className={`w-full border ${t.divider} rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-violet-400 ${t.inp}`} />
             </div>
           ))}
         </div>
-        <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
-          <button onClick={save} disabled={saving} className="px-4 py-2 text-sm bg-violet-600 text-white font-medium rounded-lg disabled:opacity-50">
+        <div className={`px-6 py-4 border-t ${t.divider} flex justify-end gap-3`}>
+          <button onClick={onClose} className={`px-4 py-2 text-sm ${t.btnAlt} rounded-lg`}>Cancel</button>
+          <button onClick={save} disabled={saving} className={`px-4 py-2 text-sm ${t.btn} rounded-lg font-medium disabled:opacity-50`}>
             {saving ? "Saving…" : "Save"}
           </button>
         </div>
@@ -410,6 +413,7 @@ function AddProductModal({
 }: {
   storeCode: string; onClose: () => void; onAdded: () => void;
 }) {
+  const { theme: t } = useTheme();
   const [tab, setTab] = useState<"search" | "manual">("search");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<{ product_no: string; warehouse_name: string | null; image_url: string | null }[]>([]);
@@ -467,19 +471,19 @@ function AddProductModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[85vh] flex flex-col">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h3 className="font-semibold text-gray-900">Add Product to {STORE_NAMES[storeCode] || storeCode}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className={`${t.card} rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[85vh] flex flex-col`}>
+        <div className={`flex items-center justify-between px-5 py-4 border-b ${t.divider}`}>
+          <h3 className={`font-semibold ${t.t1}`}>Add Product to {STORE_NAMES[storeCode] || storeCode}</h3>
+          <button onClick={onClose} className={`${t.t4} hover:${t.t1} text-xl`}>×</button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-100">
-          {(["search", "manual"] as const).map(t => (
-            <button key={t} onClick={() => { setTab(t); setMsg(""); }}
-              className={`flex-1 py-2.5 text-sm font-medium transition-colors ${tab === t ? "text-violet-600 border-b-2 border-violet-600" : "text-gray-500 hover:text-gray-700"}`}>
-              {t === "search" ? "Search Feishu Products" : "Add Manually"}
+        <div className={`flex border-b ${t.divider}`}>
+          {(["search", "manual"] as const).map(tb => (
+            <button key={tb} onClick={() => { setTab(tb); setMsg(""); }}
+              className={`flex-1 py-2.5 text-sm font-medium transition-colors ${tab === tb ? `${t.accentTxt} border-b-2 border-violet-500` : `${t.t3} hover:${t.t2}`}`}>
+              {tb === "search" ? "Search Feishu Products" : "Add Manually"}
             </button>
           ))}
         </div>
@@ -491,31 +495,31 @@ function AddProductModal({
                 <input value={query} onChange={e => setQuery(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && search()}
                   placeholder="Product no, name or SKU…"
-                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400" />
+                  className={`flex-1 border ${t.divider} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 ${t.inp}`} />
                 <button onClick={search} disabled={searching}
-                  className="bg-violet-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-violet-700 disabled:opacity-50">
+                  className={`${t.btn} px-3 py-2 rounded-lg text-sm disabled:opacity-50`}>
                   {searching ? "…" : "Search"}
                 </button>
               </div>
               {results.length === 0 && !searching && (
-                <p className="text-sm text-gray-400 text-center py-6">Search for products synced from Feishu</p>
+                <p className={`text-sm ${t.t4} text-center py-6`}>Search for products synced from Feishu</p>
               )}
               <div className="space-y-1.5">
                 {results.map(p => (
                   <label key={p.product_no}
-                    className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors ${selected.has(p.product_no) ? "border-violet-400 bg-violet-50" : "border-gray-200 hover:bg-gray-50"}`}>
+                    className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors ${selected.has(p.product_no) ? `border-violet-400 ${t.accentSoft}` : `${t.divider} hover:${t.bar}`}`}>
                     <input type="checkbox" checked={selected.has(p.product_no)}
                       onChange={() => toggleSelect(p.product_no)}
                       className="accent-violet-600" />
                     {p.image_url ? (
-                      <img src={p.image_url} alt="" className="w-8 h-8 rounded object-cover border border-gray-100 shrink-0"
+                      <img src={p.image_url} alt="" className={`w-8 h-8 rounded object-cover border ${t.divider} shrink-0`}
                         onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
                     ) : (
-                      <div className="w-8 h-8 rounded bg-gray-100 shrink-0" />
+                      <div className={`w-8 h-8 rounded ${t.bar} shrink-0`} />
                     )}
                     <div className="min-w-0">
-                      <div className="text-sm font-medium">#{p.product_no}</div>
-                      {p.warehouse_name && <div className="text-xs text-gray-400 truncate">{p.warehouse_name}</div>}
+                      <div className={`text-sm font-medium ${t.t1}`}>#{p.product_no}</div>
+                      {p.warehouse_name && <div className={`text-xs ${t.t4} truncate`}>{p.warehouse_name}</div>}
                     </div>
                   </label>
                 ))}
@@ -523,41 +527,30 @@ function AddProductModal({
             </>
           ) : (
             <div className="space-y-3">
-              <div>
-                <label className="text-xs font-medium text-gray-500 block mb-1">Product Number *</label>
-                <input value={manual.product_no} onChange={e => setManual(f => ({ ...f, product_no: e.target.value }))}
-                  placeholder="e.g. 156"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400" />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-500 block mb-1">Product Name</label>
-                <input value={manual.warehouse_name} onChange={e => setManual(f => ({ ...f, warehouse_name: e.target.value }))}
-                  placeholder="Product description"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400" />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-500 block mb-1">Image URL (optional)</label>
-                <input value={manual.image_url} onChange={e => setManual(f => ({ ...f, image_url: e.target.value }))}
-                  placeholder="https://…"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400" />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-500 block mb-1">SKU (optional)</label>
-                <input value={manual.sku} onChange={e => setManual(f => ({ ...f, sku: e.target.value }))}
-                  placeholder="SKU code"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400" />
-              </div>
+              {[
+                { label: "Product Number *", key: "product_no", val: manual.product_no, ph: "e.g. 156" },
+                { label: "Product Name", key: "warehouse_name", val: manual.warehouse_name, ph: "Product description" },
+                { label: "Image URL (optional)", key: "image_url", val: manual.image_url, ph: "https://…" },
+                { label: "SKU (optional)", key: "sku", val: manual.sku, ph: "SKU code" },
+              ].map(f => (
+                <div key={f.key}>
+                  <label className={`text-xs font-medium ${t.t3} block mb-1`}>{f.label}</label>
+                  <input value={f.val} onChange={e => setManual(prev => ({ ...prev, [f.key]: e.target.value }))}
+                    placeholder={f.ph}
+                    className={`w-full border ${t.divider} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 ${t.inp}`} />
+                </div>
+              ))}
             </div>
           )}
-          {msg && <p className="text-xs text-red-600 mt-2">{msg}</p>}
+          {msg && <p className="text-xs text-red-500 mt-2">{msg}</p>}
         </div>
 
-        <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
-          <button onClick={onClose} className="px-3 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
+        <div className={`px-5 py-4 border-t ${t.divider} flex justify-end gap-2`}>
+          <button onClick={onClose} className={`px-3 py-2 text-sm ${t.btnAlt} rounded-lg`}>Cancel</button>
           <button
             onClick={tab === "search" ? addSelected : addManual}
             disabled={saving || (tab === "search" && selected.size === 0)}
-            className="px-4 py-2 text-sm bg-violet-600 text-white font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50">
+            className={`px-4 py-2 text-sm ${t.btn} rounded-lg font-medium disabled:opacity-50`}>
             {saving ? "Adding…" : tab === "search" ? `Add ${selected.size > 0 ? `(${selected.size})` : ""}` : "Add Product"}
           </button>
         </div>
@@ -570,6 +563,7 @@ function AddProductModal({
 const CHART_COLORS = ["#7c3aed","#2563eb","#d97706","#16a34a","#dc2626","#0891b2","#db2777","#65a30d","#9333ea","#0d9488"];
 
 function WeeklyReport({ storeCode }: { storeCode: string }) {
+  const { theme: t } = useTheme();
   const [data, setData] = useState<{
     periods: (Period & { total_tasks: number; done_tasks: number; in_progress_tasks: number; product_count: number })[];
     user_period_stats: { period_id: number; user_id: number; name: string; role: string; done_count: number; total_assigned: number }[];
@@ -590,9 +584,9 @@ function WeeklyReport({ storeCode }: { storeCode: string }) {
     return null;
   }
 
-  if (loading) return <div className="flex items-center justify-center h-48 text-gray-400">Loading report…</div>;
+  if (loading) return <div className={`flex items-center justify-center h-48 ${t.t4}`}>Loading report…</div>;
   if (!data || data.periods.length === 0)
-    return <div className="flex flex-col items-center justify-center h-48 text-gray-400 text-sm gap-1"><p className="text-lg">No historical data yet</p><p>Data will appear once you complete weeks with assigned tasks.</p></div>;
+    return <div className={`flex flex-col items-center justify-center h-48 ${t.t4} text-sm gap-1`}><p className="text-lg">No historical data yet</p><p>Data will appear once you complete weeks with assigned tasks.</p></div>;
 
   const { periods, user_period_stats, top_products, users } = data;
 
@@ -621,28 +615,28 @@ function WeeklyReport({ storeCode }: { storeCode: string }) {
       {/* KPI row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: "Total Weeks", value: periods.length, sub: "tracked", color: "text-violet-600" },
-          { label: "Latest Done", value: `${lastP.done_tasks}/${lastP.total_tasks}`, sub: `${Math.round(lastPct)}% complete`, color: "text-green-600" },
-          { label: "Products", value: lastP.product_count, sub: "this week", color: "text-blue-600" },
+          { label: "Total Weeks", value: periods.length, sub: "tracked", color: "text-violet-500" },
+          { label: "Latest Done", value: `${lastP.done_tasks}/${lastP.total_tasks}`, sub: `${Math.round(lastPct)}% complete`, color: "text-green-500" },
+          { label: "Products", value: lastP.product_count, sub: "this week", color: "text-blue-500" },
           {
             label: "vs Last Week",
             value: trend != null ? `${trend >= 0 ? "+" : ""}${trend.toFixed(0)}%` : "–",
             sub: trend != null ? (trend >= 0 ? "improvement" : "decline") : "first week",
-            color: trend == null ? "text-gray-400" : trend >= 0 ? "text-green-600" : "text-red-500",
+            color: trend == null ? t.t4 : trend >= 0 ? "text-green-500" : "text-red-500",
           },
         ].map(k => (
-          <div key={k.label} className="bg-white rounded-xl border border-gray-200 p-4">
-            <div className="text-xs text-gray-400 font-medium uppercase tracking-wider mb-1">{k.label}</div>
+          <div key={k.label} className={`${t.card} rounded-xl p-4`}>
+            <div className={`text-xs ${t.t4} font-medium uppercase tracking-wider mb-1`}>{k.label}</div>
             <div className={`text-2xl font-bold ${k.color}`}>{k.value}</div>
-            <div className="text-xs text-gray-400 mt-0.5">{k.sub}</div>
+            <div className={`text-xs ${t.t4} mt-0.5`}>{k.sub}</div>
           </div>
         ))}
       </div>
 
       {/* Per-user done count chart */}
       {users.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <h3 className="font-bold text-gray-800 mb-4">Done Tasks Per Member · By Week</h3>
+        <div className={`${t.card} rounded-xl p-4`}>
+          <h3 className={`font-bold ${t.t1} mb-4`}>Done Tasks Per Member · By Week</h3>
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -660,8 +654,8 @@ function WeeklyReport({ storeCode }: { storeCode: string }) {
       )}
 
       {/* Store completion % bar chart */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <h3 className="font-bold text-gray-800 mb-4">Store Completion % · By Week</h3>
+      <div className={`${t.card} rounded-xl p-4`}>
+        <h3 className={`font-bold ${t.t1} mb-4`}>Store Completion % · By Week</h3>
         <ResponsiveContainer width="100%" height={180}>
           <BarChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -674,35 +668,35 @@ function WeeklyReport({ storeCode }: { storeCode: string }) {
       </div>
 
       {/* User performance table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="p-4 border-b border-gray-100 bg-gray-50/50">
-          <h3 className="font-bold text-gray-800">Member Performance · Done / Assigned per Week</h3>
+      <div className={`${t.card} rounded-xl overflow-hidden`}>
+        <div className={`p-4 border-b ${t.divider} ${t.bar}/50`}>
+          <h3 className={`font-bold ${t.t1}`}>Member Performance · Done / Assigned per Week</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm border-collapse">
             <thead>
-              <tr className="border-b border-gray-100 bg-gray-50">
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 min-w-[140px]">Member</th>
+              <tr className={`border-b ${t.divider} ${t.bar}`}>
+                <th className={`text-left px-4 py-2.5 text-xs font-semibold ${t.t3} uppercase tracking-wider sticky left-0 ${t.bar} min-w-[140px]`}>Member</th>
                 {periods.map(p => (
-                  <th key={p.id} className="text-center px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider min-w-[90px]">
+                  <th key={p.id} className={`text-center px-3 py-2.5 text-xs font-semibold ${t.t3} uppercase tracking-wider min-w-[90px]`}>
                     {p.label ?? p.period_start?.slice(5)}
                   </th>
                 ))}
-                <th className="text-center px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Total</th>
+                <th className={`text-center px-3 py-2.5 text-xs font-semibold ${t.t3} uppercase tracking-wider`}>Total</th>
               </tr>
             </thead>
             <tbody>
               {users.map((u, uidx) => {
                 let totalDone = 0;
                 return (
-                  <tr key={u.id} className={uidx % 2 ? "bg-gray-50/40" : ""}>
-                    <td className={`px-4 py-2.5 sticky left-0 ${uidx % 2 ? "bg-gray-50" : "bg-white"} border-r border-gray-100`}>
+                  <tr key={u.id} className={uidx % 2 ? `${t.bar}/30` : ""}>
+                    <td className={`px-4 py-2.5 sticky left-0 ${uidx % 2 ? t.bar : t.card.split(" ")[0]} border-r ${t.divider}`}>
                       <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-violet-100 text-violet-700 text-xs font-bold flex items-center justify-center shrink-0">
+                        <div className={`w-7 h-7 rounded-full ${t.accentSoft} text-xs font-bold flex items-center justify-center shrink-0`}>
                           {u.name.charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <div className="font-medium text-gray-900 text-xs">{u.name}</div>
+                          <div className={`font-medium ${t.t1} text-xs`}>{u.name}</div>
                           <div>{roleBadgeSm(u.role)}</div>
                         </div>
                       </div>
@@ -717,32 +711,32 @@ function WeeklyReport({ storeCode }: { storeCode: string }) {
                         <td key={p.id} className="px-3 py-2.5 text-center">
                           {assigned > 0 ? (
                             <div>
-                              <div className="font-semibold text-gray-900 text-xs">{done}<span className="text-gray-400 font-normal">/{assigned}</span></div>
-                              <div className={`text-[10px] font-medium ${pct === 100 ? "text-green-600" : pct! >= 50 ? "text-amber-600" : "text-gray-400"}`}>{pct}%</div>
+                              <div className={`font-semibold ${t.t1} text-xs`}>{done}<span className={`${t.t4} font-normal`}>/{assigned}</span></div>
+                              <div className={`text-[10px] font-medium ${pct === 100 ? "text-green-500" : pct! >= 50 ? "text-amber-500" : t.t4}`}>{pct}%</div>
                             </div>
                           ) : (
-                            <span className="text-gray-300 text-xs">–</span>
+                            <span className={`${t.t5} text-xs`}>–</span>
                           )}
                         </td>
                       );
                     })}
-                    <td className="px-3 py-2.5 text-center font-bold text-violet-600">{totalDone}</td>
+                    <td className={`px-3 py-2.5 text-center font-bold ${t.accentTxt}`}>{totalDone}</td>
                   </tr>
                 );
               })}
               {/* Store totals row */}
-              <tr className="border-t-2 border-gray-200 bg-gray-50 font-semibold">
-                <td className="px-4 py-2.5 sticky left-0 bg-gray-50 border-r border-gray-100 text-xs text-gray-600 uppercase tracking-wider">Store Total</td>
+              <tr className={`border-t-2 ${t.divider} ${t.bar} font-semibold`}>
+                <td className={`px-4 py-2.5 sticky left-0 ${t.bar} border-r ${t.divider} text-xs ${t.t3} uppercase tracking-wider`}>Store Total</td>
                 {periods.map(p => {
                   const pct = p.total_tasks > 0 ? Math.round((p.done_tasks / p.total_tasks) * 100) : 0;
                   return (
                     <td key={p.id} className="px-3 py-2.5 text-center">
-                      <div className="font-bold text-gray-900 text-xs">{p.done_tasks}<span className="text-gray-400 font-normal">/{p.total_tasks}</span></div>
-                      <div className={`text-[10px] font-medium ${pct >= 80 ? "text-green-600" : pct >= 50 ? "text-amber-600" : "text-red-500"}`}>{pct}%</div>
+                      <div className={`font-bold ${t.t1} text-xs`}>{p.done_tasks}<span className={`${t.t4} font-normal`}>/{p.total_tasks}</span></div>
+                      <div className={`text-[10px] font-medium ${pct >= 80 ? "text-green-500" : pct >= 50 ? "text-amber-500" : "text-red-500"}`}>{pct}%</div>
                     </td>
                   );
                 })}
-                <td className="px-3 py-2.5 text-center font-bold text-violet-600">
+                <td className={`px-3 py-2.5 text-center font-bold ${t.accentTxt}`}>
                   {periods.reduce((s, p) => s + p.done_tasks, 0)}
                 </td>
               </tr>
@@ -753,31 +747,31 @@ function WeeklyReport({ storeCode }: { storeCode: string }) {
 
       {/* Product progress (latest week) */}
       {top_products.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="p-4 border-b border-gray-100 bg-gray-50/50">
-            <h3 className="font-bold text-gray-800">Product Progress · Latest Week</h3>
-            <p className="text-xs text-gray-400 mt-0.5">Showing {top_products.length} products. Green = all done, amber = partial, red = not started.</p>
+        <div className={`${t.card} rounded-xl overflow-hidden`}>
+          <div className={`p-4 border-b ${t.divider} ${t.bar}/50`}>
+            <h3 className={`font-bold ${t.t1}`}>Product Progress · Latest Week</h3>
+            <p className={`text-xs ${t.t4} mt-0.5`}>Showing {top_products.length} products. Green = all done, amber = partial, red = not started.</p>
           </div>
           <div className="p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
             {top_products.map(p => {
               const pct = p.total_tasks > 0 ? Math.round((p.done_tasks / p.total_tasks) * 100) : 0;
-              const barColor = pct === 100 ? "bg-green-500" : pct > 0 ? "bg-amber-400" : "bg-red-300";
+              const barColor = pct === 100 ? "bg-green-500" : pct > 0 ? "bg-amber-400" : "bg-red-400";
               return (
-                <div key={p.product_no} className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-100 hover:bg-gray-50">
+                <div key={p.product_no} className={`flex items-center gap-3 p-2.5 rounded-lg border ${t.divider} hover:${t.bar} transition-colors`}>
                   {p.image_url ? (
-                    <img src={p.image_url} alt="" className="w-10 h-10 rounded-lg object-cover border border-gray-200 shrink-0" />
+                    <img src={p.image_url} alt="" className={`w-10 h-10 rounded-lg object-cover border ${t.divider} shrink-0`} />
                   ) : (
-                    <div className="w-10 h-10 rounded-lg bg-gray-100 shrink-0 flex items-center justify-center text-gray-300 text-[10px] font-bold">#{p.product_no}</div>
+                    <div className={`w-10 h-10 rounded-lg ${t.bar} shrink-0 flex items-center justify-center ${t.t5} text-[10px] font-bold`}>#{p.product_no}</div>
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-semibold text-gray-900">#{p.product_no}</span>
-                      <span className={`text-[10px] font-bold ${pct === 100 ? "text-green-600" : pct > 0 ? "text-amber-600" : "text-red-500"}`}>{pct}%</span>
+                      <span className={`text-xs font-semibold ${t.t1}`}>#{p.product_no}</span>
+                      <span className={`text-[10px] font-bold ${pct === 100 ? "text-green-500" : pct > 0 ? "text-amber-500" : "text-red-500"}`}>{pct}%</span>
                     </div>
-                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className={`h-1.5 ${t.bar} rounded-full overflow-hidden`}>
                       <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
                     </div>
-                    <div className="text-[10px] text-gray-400 mt-0.5 truncate">{p.warehouse_name || "–"} · {p.done_tasks}/{p.total_tasks} tasks</div>
+                    <div className={`text-[10px] ${t.t4} mt-0.5 truncate`}>{p.warehouse_name || "–"} · {p.done_tasks}/{p.total_tasks} tasks</div>
                   </div>
                 </div>
               );
@@ -788,40 +782,40 @@ function WeeklyReport({ storeCode }: { storeCode: string }) {
 
       {/* Recent Optimization Notes */}
       {data.recent_notes && data.recent_notes.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="p-4 border-b border-gray-100 bg-gray-50/50">
-            <h3 className="font-bold text-gray-800">Optimization History & Results</h3>
-            <p className="text-xs text-gray-400 mt-0.5">Recent analysis, actions, and results logged by shop leaders.</p>
+        <div className={`${t.card} rounded-xl overflow-hidden`}>
+          <div className={`p-4 border-b ${t.divider} ${t.bar}/50`}>
+            <h3 className={`font-bold ${t.t1}`}>Optimization History & Results</h3>
+            <p className={`text-xs ${t.t4} mt-0.5`}>Recent analysis, actions, and results logged by shop leaders.</p>
           </div>
-          <div className="divide-y divide-gray-100">
+          <div className={`divide-y ${t.divider}`}>
             {data.recent_notes.map((n, i) => (
-              <div key={i} className="p-4 hover:bg-gray-50 transition-colors">
+              <div key={i} className={`p-4 hover:${t.bar} transition-colors`}>
                 <div className="flex items-start gap-4 mb-3">
                   {n.image_url ? (
-                    <img src={n.image_url} alt="" className="w-12 h-12 rounded-lg object-cover border border-gray-200 shrink-0" />
+                    <img src={n.image_url} alt="" className={`w-12 h-12 rounded-lg object-cover border ${t.divider} shrink-0`} />
                   ) : (
-                    <div className="w-12 h-12 rounded-lg bg-gray-100 shrink-0 flex items-center justify-center text-gray-300 text-xs font-bold">#{n.product_no}</div>
+                    <div className={`w-12 h-12 rounded-lg ${t.bar} shrink-0 flex items-center justify-center ${t.t5} text-xs font-bold`}>#{n.product_no}</div>
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-sm font-bold text-gray-900">#{n.product_no}</span>
-                      <span className="text-[10px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded font-medium">{n.period_label}</span>
+                      <span className={`text-sm font-bold ${t.t1}`}>#{n.product_no}</span>
+                      <span className={`text-[10px] ${t.accentSoft} px-1.5 py-0.5 rounded font-medium`}>{n.period_label}</span>
                     </div>
-                    <div className="text-xs text-gray-400 truncate">{n.warehouse_name || "–"} · Updated {new Date(n.updated_at).toLocaleDateString()}</div>
+                    <div className={`text-xs ${t.t4} truncate`}>{n.warehouse_name || "–"} · Updated {new Date(n.updated_at).toLocaleDateString()}</div>
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="bg-blue-50/30 p-2.5 rounded-lg border border-blue-100/50">
-                    <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wider mb-1">Analysis</div>
-                    <p className="text-xs text-gray-700 leading-relaxed italic">{n.analysis || "–"}</p>
+                  <div className="bg-blue-500/10 p-2.5 rounded-lg border border-blue-500/20">
+                    <div className="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-1">Analysis</div>
+                    <p className={`text-xs ${t.t2} leading-relaxed italic`}>{n.analysis || "–"}</p>
                   </div>
-                  <div className="bg-amber-50/30 p-2.5 rounded-lg border border-amber-100/50">
-                    <div className="text-[10px] font-bold text-amber-600 uppercase tracking-wider mb-1">Action</div>
-                    <p className="text-xs text-gray-700 leading-relaxed italic">{n.action || "–"}</p>
+                  <div className="bg-amber-500/10 p-2.5 rounded-lg border border-amber-500/20">
+                    <div className="text-[10px] font-bold text-amber-400 uppercase tracking-wider mb-1">Action</div>
+                    <p className={`text-xs ${t.t2} leading-relaxed italic`}>{n.action || "–"}</p>
                   </div>
-                  <div className="bg-green-50/30 p-2.5 rounded-lg border border-green-100/50">
-                    <div className="text-[10px] font-bold text-green-600 uppercase tracking-wider mb-1">Results</div>
-                    <p className="text-xs text-gray-900 leading-relaxed font-medium italic">{n.results || "–"}</p>
+                  <div className="bg-green-500/10 p-2.5 rounded-lg border border-green-500/20">
+                    <div className="text-[10px] font-bold text-green-400 uppercase tracking-wider mb-1">Results</div>
+                    <p className={`text-xs ${t.t1} leading-relaxed font-medium italic`}>{n.results || "–"}</p>
                   </div>
                 </div>
               </div>
@@ -851,6 +845,7 @@ function TeamPanel({
   onTaskUpdate: (productNo: string, taskKey: string, updates: Partial<TaskInfo>) => void;
   onReload: () => void;
 }) {
+  const { theme: t } = useTheme();
   const [subTab, setSubTab] = useState<"performance" | "report">("performance");
   const [focusedId, setFocusedId] = useState<number | "unassigned" | null>(null);
   const [search, setSearch] = useState("");
@@ -902,7 +897,7 @@ function TeamPanel({
     if (role === "leader") return <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">Shop Leader</span>;
     if (role === "junior") return <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium">Junior</span>;
     if (role === "admin")  return <span className="text-[10px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded font-medium">Admin</span>;
-    return <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-medium">Member</span>;
+    return <span className={`text-[10px] ${t.card2} ${t.t3} px-1.5 py-0.5 rounded font-medium`}>Member</span>;
   }
 
   async function assignTask(product: Product, taskKey: string, task: TaskInfo, userId: number | null) {
@@ -943,17 +938,17 @@ function TeamPanel({
     <div className="space-y-4">
       {/* Sub-tab header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
-          {(["performance", "report"] as const).map(t => (
-            <button key={t} onClick={() => setSubTab(t)}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${subTab === t ? "bg-white text-violet-700 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
-              {t === "performance" ? "👥 Performance" : "📊 Weekly Report"}
+        <div className={`flex gap-1 ${t.bar} p-1 rounded-lg`}>
+          {(["performance", "report"] as const).map(st => (
+            <button key={st} onClick={() => setSubTab(st)}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${subTab === st ? `${t.card.split(" ")[0]} ${t.accentTxt} shadow-sm` : `${t.t3} hover:${t.t2}`}`}>
+              {st === "performance" ? "👥 Performance" : "📊 Weekly Report"}
             </button>
           ))}
         </div>
         {isAdmin && (
           <button onClick={() => setShowCreate(v => !v)}
-            className="flex items-center gap-1.5 bg-violet-600 text-white text-sm px-3 py-1.5 rounded-lg hover:bg-violet-700 font-medium">
+            className={`flex items-center gap-1.5 ${t.btn} text-sm px-3 py-1.5 rounded-lg font-medium`}>
             + Add Member
           </button>
         )}
@@ -961,9 +956,9 @@ function TeamPanel({
 
       {/* Create user inline form */}
       {showCreate && isAdmin && (
-        <div className="bg-violet-50 border border-violet-200 rounded-xl p-4 space-y-3">
-          <h3 className="text-sm font-bold text-violet-900">New Team Member</h3>
-          {createError && <p className="text-xs text-red-600 bg-red-50 border border-red-200 px-3 py-2 rounded-lg">{createError}</p>}
+        <div className={`${t.accentSoft} rounded-xl p-4 space-y-3`}>
+          <h3 className={`text-sm font-bold ${t.accentTxt}`}>New Team Member</h3>
+          {createError && <p className="text-xs text-red-500 bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-lg">{createError}</p>}
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             {[
               { label: "Name", key: "name", type: "text", placeholder: "Sailini" },
@@ -971,17 +966,17 @@ function TeamPanel({
               { label: "Password", key: "password", type: "password", placeholder: "••••••••" },
             ].map(f => (
               <div key={f.key}>
-                <label className="text-xs text-gray-500 block mb-1">{f.label}</label>
+                <label className={`text-xs ${t.t3} block mb-1`}>{f.label}</label>
                 <input type={f.type} placeholder={f.placeholder}
                   value={(createForm as Record<string, string>)[f.key]}
                   onChange={e => setCreateForm(prev => ({ ...prev, [f.key]: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 bg-white" />
+                  className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 ${t.inp}`} />
               </div>
             ))}
             <div>
-              <label className="text-xs text-gray-500 block mb-1">Role</label>
+              <label className={`text-xs ${t.t3} block mb-1`}>Role</label>
               <select value={createForm.role} onChange={e => setCreateForm(p => ({ ...p, role: e.target.value }))}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 bg-white">
+                className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 ${t.inp}`}>
                 <option value="junior">Junior</option>
                 <option value="leader">Shop Leader</option>
                 <option value="member">Member</option>
@@ -989,9 +984,9 @@ function TeamPanel({
               </select>
             </div>
             <div>
-              <label className="text-xs text-gray-500 block mb-1">Store</label>
+              <label className={`text-xs ${t.t3} block mb-1`}>Store</label>
               <select value={createForm.store_code} onChange={e => setCreateForm(p => ({ ...p, store_code: e.target.value }))}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 bg-white">
+                className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 ${t.inp}`}>
                 <option value="">All stores</option>
                 {STORES_LIST.map(s => <option key={s.code} value={s.code}>{s.name} ({s.code})</option>)}
               </select>
@@ -999,11 +994,11 @@ function TeamPanel({
           </div>
           <div className="flex gap-2 pt-1">
             <button onClick={createUser} disabled={createSaving}
-              className="bg-violet-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-violet-700 disabled:opacity-50 font-medium">
+              className={`${t.btn} text-sm px-4 py-2 rounded-lg disabled:opacity-50 font-medium`}>
               {createSaving ? "Creating…" : "Create Member"}
             </button>
             <button onClick={() => { setShowCreate(false); setCreateError(""); }}
-              className="text-sm px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Cancel</button>
+              className={`text-sm px-4 py-2 rounded-lg ${t.btnAlt}`}>Cancel</button>
           </div>
         </div>
       )}
@@ -1014,7 +1009,7 @@ function TeamPanel({
         <>
           {/* Member summary cards */}
           {users.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-48 text-gray-400 space-y-2">
+            <div className={`flex flex-col items-center justify-center h-48 ${t.t4} space-y-2`}>
               <p className="text-lg">No team members yet</p>
               <p className="text-sm">Click <strong>+ Add Member</strong> above to create your first team member.</p>
             </div>
@@ -1030,45 +1025,45 @@ function TeamPanel({
                 const isFocused = focusedId === u.id;
                  return (
                   <button key={u.id} onClick={() => setFocusedId(isFocused ? null : u.id)}
-                    className={`relative group p-4 rounded-xl border text-left transition-all ${isFocused ? "border-violet-400 bg-violet-50 ring-2 ring-violet-200" : "border-gray-200 bg-white hover:border-violet-300 hover:shadow-sm"}`}>
+                    className={`relative group p-4 rounded-xl border text-left transition-all ${isFocused ? `border-violet-400 ${t.accentSoft} ring-2 ring-violet-500/20` : `${t.divider} ${t.card.split(" ")[0]} hover:border-violet-400 hover:shadow-sm`}`}>
                     {isAdmin && (
                       <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={(e) => { e.stopPropagation(); setEditUser(u); }} className="p-1 hover:bg-violet-100 rounded text-violet-600 text-[10px]" title="Edit Member">✏️</button>
-                        <button onClick={(e) => { e.stopPropagation(); handleDeleteUser(u.id); }} className="p-1 hover:bg-red-100 rounded text-red-600 text-[10px]" title="Delete Member">🗑️</button>
+                        <button onClick={(e) => { e.stopPropagation(); setEditUser(u); }} className={`p-1 hover:${t.accentSoft} rounded ${t.accentTxt} text-[10px]`} title="Edit Member">✏️</button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteUser(u.id); }} className="p-1 hover:bg-red-500/10 rounded text-red-400 text-[10px]" title="Delete Member">🗑️</button>
                       </div>
                     )}
                     <div className="flex items-center gap-2 mb-3">
-                      <div className="w-9 h-9 rounded-full bg-violet-100 text-violet-700 text-sm font-bold flex items-center justify-center shrink-0">
+                      <div className={`w-9 h-9 rounded-full ${t.accentSoft} text-sm font-bold flex items-center justify-center shrink-0`}>
                         {u.name.charAt(0).toUpperCase()}
                       </div>
                       <div className="min-w-0">
-                        <div className="text-sm font-bold text-gray-900 truncate">{u.name}</div>
+                        <div className={`text-sm font-bold ${t.t1} truncate`}>{u.name}</div>
                         <div className="mt-0.5">{roleBadge(role)}</div>
                       </div>
                     </div>
                     <div className="flex items-baseline gap-1 mb-1">
-                      <span className="text-2xl font-bold text-violet-600">{done}</span>
-                      <span className="text-xs text-gray-400">/ {total} done</span>
+                      <span className={`text-2xl font-bold ${t.accentTxt}`}>{done}</span>
+                      <span className={`text-xs ${t.t4}`}>/ {total} done</span>
                     </div>
-                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className={`h-1.5 ${t.bar} rounded-full overflow-hidden`}>
                       <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
                     </div>
-                    <div className="text-[10px] text-gray-400 mt-1">{pct}% complete</div>
+                    <div className={`text-[10px] ${t.t4} mt-1`}>{pct}% complete</div>
                   </button>
                 );
               })}
               {unassigned.length > 0 && (
                 <button onClick={() => setFocusedId(focusedId === "unassigned" ? null : "unassigned")}
-                  className={`p-4 rounded-xl border text-left transition-all ${focusedId === "unassigned" ? "border-orange-400 bg-orange-50 ring-2 ring-orange-200" : "border-dashed border-gray-300 bg-white hover:border-orange-300"}`}>
+                  className={`p-4 rounded-xl border text-left transition-all ${focusedId === "unassigned" ? "border-orange-400 bg-orange-500/10 ring-2 ring-orange-500/20" : `border-dashed ${t.divider} ${t.card.split(" ")[0]} hover:border-orange-400`}`}>
                   <div className="flex items-center gap-2 mb-3">
-                    <div className="w-9 h-9 rounded-full bg-gray-100 text-gray-400 text-xl flex items-center justify-center shrink-0">?</div>
+                    <div className={`w-9 h-9 rounded-full ${t.bar} ${t.t3} text-xl flex items-center justify-center shrink-0`}>?</div>
                     <div>
-                      <div className="text-sm font-bold text-gray-500">Unassigned</div>
-                      <span className="text-[10px] bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded font-medium">Needs assignment</span>
+                      <div className={`text-sm font-bold ${t.t3}`}>Unassigned</div>
+                      <span className="text-[10px] bg-orange-500/10 text-orange-400 px-1.5 py-0.5 rounded font-medium">Needs assignment</span>
                     </div>
                   </div>
-                  <div className="text-2xl font-bold text-orange-500">{unassigned.length}</div>
-                  <div className="text-xs text-gray-400 mt-1">tasks without owner</div>
+                  <div className="text-2xl font-bold text-orange-400">{unassigned.length}</div>
+                  <div className={`text-xs ${t.t4} mt-1`}>tasks without owner</div>
                 </button>
               )}
             </div>
@@ -1078,16 +1073,16 @@ function TeamPanel({
           {focusedId !== null && (
             <div className="flex items-center gap-2 flex-wrap">
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search product…"
-                className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-44 focus:outline-none focus:ring-2 focus:ring-violet-400" />
+                className={`border ${t.divider} rounded-lg px-3 py-1.5 text-sm w-44 focus:outline-none focus:ring-2 focus:ring-violet-400 ${t.inp}`} />
               <div className="flex gap-1 flex-wrap">
                 <button onClick={() => setTaskFilter("all")}
-                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${taskFilter === "all" ? "bg-violet-600 text-white border-violet-600" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}>
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${taskFilter === "all" ? "bg-violet-600 text-white border-violet-600" : `${t.card.split(" ")[0]} ${t.t3} ${t.divider} hover:${t.bar}`}`}>
                   All Tasks
                 </button>
-                {taskTypeList.map(t => (
-                  <button key={t} onClick={() => setTaskFilter(t === taskFilter ? "all" : t)}
-                    className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${taskFilter === t ? "bg-violet-600 text-white border-violet-600" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}>
-                    {taskLabels[t] || t}
+                {taskTypeList.map(tk => (
+                  <button key={tk} onClick={() => setTaskFilter(tk === taskFilter ? "all" : tk)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${taskFilter === tk ? "bg-violet-600 text-white border-violet-600" : `${t.card.split(" ")[0]} ${t.t3} ${t.divider} hover:${t.bar}`}`}>
+                    {taskLabels[tk] || tk}
                   </button>
                 ))}
               </div>
@@ -1096,37 +1091,37 @@ function TeamPanel({
 
           {/* Task detail table */}
           {focusedList !== null && (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-gray-50/50 flex-wrap gap-2">
+            <div className={`${t.card} rounded-xl overflow-hidden`}>
+              <div className={`flex items-center justify-between p-4 border-b ${t.divider} ${t.bar}/50 flex-wrap gap-2`}>
                 <div>
-                  <h3 className="font-bold text-gray-900">
+                  <h3 className={`font-bold ${t.t1}`}>
                     {focusedId === "unassigned" ? "Unassigned Tasks" : `${focusedUser?.name ?? ""}'s Tasks`}
                   </h3>
-                  <p className="text-xs text-gray-500">
+                  <p className={`text-xs ${t.t3}`}>
                     {focusedList.length}{rawFocusedList && rawFocusedList.length !== focusedList.length ? ` of ${rawFocusedList.length}` : ""} tasks
                   </p>
                 </div>
                 {focusedId !== "unassigned" && (rawFocusedList?.length ?? 0) > 0 && (
                   <div className="flex items-center gap-3 text-xs">
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /><span className="font-bold text-green-700">{rawFocusedList!.filter(x => x.task.status === "done").length}</span> done</span>
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block" /><span className="font-bold text-amber-700">{rawFocusedList!.filter(x => x.task.status === "in_progress").length}</span> in progress</span>
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-300 inline-block" /><span className="text-gray-500">{rawFocusedList!.filter(x => x.task.status === "todo").length}</span> todo</span>
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /><span className="font-bold text-green-500">{rawFocusedList!.filter(x => x.task.status === "done").length}</span> done</span>
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block" /><span className="font-bold text-amber-500">{rawFocusedList!.filter(x => x.task.status === "in_progress").length}</span> in progress</span>
+                    <span className={`flex items-center gap-1`}><span className={`w-2 h-2 rounded-full ${t.bar} inline-block`} /><span className={t.t4}>{rawFocusedList!.filter(x => x.task.status === "todo").length}</span> todo</span>
                   </div>
                 )}
               </div>
               {focusedList.length === 0 ? (
-                <div className="p-8 text-center text-gray-400 text-sm">
+                <div className={`p-8 text-center ${t.t4} text-sm`}>
                   {search || taskFilter !== "all" ? "No tasks match your filters." : "No tasks assigned. Go to the Board tab and right-click a task cell to assign it."}
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm border-collapse">
                     <thead>
-                      <tr className="border-b border-gray-100 bg-gray-50">
-                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Product</th>
-                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Task</th>
-                        <th className="text-center px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                        <th className="text-center px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      <tr className={`border-b ${t.divider} ${t.bar}`}>
+                        <th className={`text-left px-4 py-2.5 text-xs font-semibold ${t.t3} uppercase tracking-wider`}>Product</th>
+                        <th className={`text-left px-4 py-2.5 text-xs font-semibold ${t.t3} uppercase tracking-wider`}>Task</th>
+                        <th className={`text-center px-4 py-2.5 text-xs font-semibold ${t.t3} uppercase tracking-wider`}>Status</th>
+                        <th className={`text-center px-4 py-2.5 text-xs font-semibold ${t.t3} uppercase tracking-wider`}>
                           {focusedId === "unassigned" ? "Assign To" : "Reassign"}
                         </th>
                       </tr>
@@ -1136,21 +1131,21 @@ function TeamPanel({
                         const cfg = STATUS_CONFIG[task.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.todo;
                         const key = `${product.product_no}-${taskKey}`;
                         return (
-                          <tr key={key} className={`border-b border-gray-50 ${idx % 2 ? "bg-gray-50/40" : ""}`}>
+                          <tr key={key} className={`border-b ${t.divider} ${idx % 2 ? `${t.bar}/30` : ""}`}>
                             <td className="px-4 py-2.5">
                               <div className="flex items-center gap-2.5">
                                 {product.image_url ? (
-                                  <img src={product.image_url} alt="" className="w-8 h-8 rounded-lg object-cover border border-gray-200 shrink-0" />
+                                  <img src={product.image_url} alt="" className={`w-8 h-8 rounded-lg object-cover border ${t.divider} shrink-0`} />
                                 ) : (
-                                  <div className="w-8 h-8 rounded-lg bg-gray-100 shrink-0 flex items-center justify-center text-gray-300 text-[10px] font-bold">#{product.product_no}</div>
+                                  <div className={`w-8 h-8 rounded-lg ${t.bar} shrink-0 flex items-center justify-center ${t.t5} text-[10px] font-bold`}>#{product.product_no}</div>
                                 )}
                                 <div>
-                                  <div className="font-semibold text-gray-900">#{product.product_no}</div>
-                                  <div className="text-xs text-gray-400 truncate max-w-[140px]">{product.warehouse_name || "–"}</div>
+                                  <div className={`font-semibold ${t.t1}`}>#{product.product_no}</div>
+                                  <div className={`text-xs ${t.t4} truncate max-w-[140px]`}>{product.warehouse_name || "–"}</div>
                                 </div>
                               </div>
                             </td>
-                            <td className="px-4 py-2.5 text-gray-700">{taskLabels[taskKey] || taskKey}</td>
+                            <td className={`px-4 py-2.5 ${t.t2}`}>{taskLabels[taskKey] || taskKey}</td>
                             <td className="px-4 py-2.5 text-center">
                               <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cfg.bg} ${cfg.text}`}>
                                 <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
@@ -1160,7 +1155,7 @@ function TeamPanel({
                             <td className="px-4 py-2.5 text-center">
                               <select disabled={saving === key} value={task.assigned_to ?? ""}
                                 onChange={e => assignTask(product, taskKey, task, e.target.value ? Number(e.target.value) : null)}
-                                className="text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-violet-400 bg-white disabled:opacity-50">
+                                className={`text-xs border rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-violet-400 ${t.inp} disabled:opacity-50`}>
                                 <option value="">— Unassign —</option>
                                 {users.map(u => (
                                   <option key={u.id} value={u.id}>{u.name}{u.role === "leader" ? " (L)" : u.role === "junior" ? " (J)" : ""}</option>
@@ -1178,7 +1173,7 @@ function TeamPanel({
           )}
 
           {focusedList === null && users.length > 0 && (
-            <div className="bg-white rounded-xl border border-dashed border-gray-200 p-6 text-center text-gray-400 text-sm">
+            <div className={`${t.card} rounded-xl border border-dashed ${t.divider} p-6 text-center ${t.t4} text-sm`}>
               Click a team member card above to see their assigned tasks and progress.
             </div>
           )}
@@ -1197,6 +1192,7 @@ function TeamPanel({
 }
 
 function EditUserModal({ user, onClose, onUpdated }: { user: User; onClose: () => void; onUpdated: () => void }) {
+  const { theme: t } = useTheme();
   const [form, setForm] = useState({ name: user.name, email: user.email, password: "", role: user.role, store_code: user.store_code || "" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -1213,35 +1209,31 @@ function EditUserModal({ user, onClose, onUpdated }: { user: User; onClose: () =
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h3 className="font-semibold text-gray-900">Edit Member: {user.name}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className={`${t.card} rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden`}>
+        <div className={`flex items-center justify-between px-5 py-4 border-b ${t.divider}`}>
+          <h3 className={`font-semibold ${t.t1}`}>Edit Member: {user.name}</h3>
+          <button onClick={onClose} className={`${t.t4} hover:${t.t1} text-xl`}>×</button>
         </div>
         <div className="p-5 space-y-4">
-          {error && <p className="text-xs text-red-600 bg-red-50 p-2 rounded">{error}</p>}
-          <div>
-            <label className="text-xs text-gray-500 block mb-1">Name</label>
-            <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400" />
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 block mb-1">Email</label>
-            <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400" />
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 block mb-1">New Password (leave blank to keep current)</label>
-            <input value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-              type="password" placeholder="••••••••"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400" />
-          </div>
+          {error && <p className="text-xs text-red-500 bg-red-500/10 p-2 rounded">{error}</p>}
+          {[
+            { label: "Name", key: "name", type: "text", val: form.name },
+            { label: "Email", key: "email", type: "email", val: form.email },
+            { label: "New Password (leave blank to keep current)", key: "password", type: "password", val: form.password },
+          ].map(f => (
+            <div key={f.key}>
+              <label className={`text-xs ${t.t3} block mb-1`}>{f.label}</label>
+              <input value={f.val} type={f.type} placeholder={f.key === "password" ? "••••••••" : undefined}
+                onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
+                className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 ${t.inp}`} />
+            </div>
+          ))}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-gray-500 block mb-1">Role</label>
+              <label className={`text-xs ${t.t3} block mb-1`}>Role</label>
               <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value as any }))}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+                className={`w-full border rounded-lg px-3 py-2 text-sm ${t.inp}`}>
                 <option value="junior">Junior</option>
                 <option value="leader">Shop Leader</option>
                 <option value="member">Member</option>
@@ -1249,18 +1241,18 @@ function EditUserModal({ user, onClose, onUpdated }: { user: User; onClose: () =
               </select>
             </div>
             <div>
-              <label className="text-xs text-gray-500 block mb-1">Store</label>
+              <label className={`text-xs ${t.t3} block mb-1`}>Store</label>
               <select value={form.store_code} onChange={e => setForm(f => ({ ...f, store_code: e.target.value }))}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+                className={`w-full border rounded-lg px-3 py-2 text-sm ${t.inp}`}>
                 <option value="">All stores</option>
                 {STORES_LIST.map(s => <option key={s.code} value={s.code}>{s.name}</option>)}
               </select>
             </div>
           </div>
         </div>
-        <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-2 bg-gray-50">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-white transition-colors">Cancel</button>
-          <button onClick={save} disabled={saving} className="px-4 py-2 text-sm bg-violet-600 text-white font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50 transition-colors">
+        <div className={`px-5 py-4 border-t ${t.divider} flex justify-end gap-2 ${t.bar}/50`}>
+          <button onClick={onClose} className={`px-4 py-2 text-sm ${t.btnAlt} rounded-lg transition-colors`}>Cancel</button>
+          <button onClick={save} disabled={saving} className={`px-4 py-2 text-sm ${t.btn} rounded-lg font-medium disabled:opacity-50 transition-colors`}>
             {saving ? "Saving…" : "Save Changes"}
           </button>
         </div>
@@ -1275,6 +1267,7 @@ function ProductSelectionPanel({
 }: {
   storeCode: string; periodId: number; selectedProductNos: Set<string>; onUpdated: () => void;
 }) {
+  const { theme: t } = useTheme();
   const [filter, setFilter] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
@@ -1311,33 +1304,33 @@ function ProductSelectionPanel({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col max-h-[70vh]">
+    <div className={`${t.card} rounded-xl overflow-hidden flex flex-col max-h-[70vh]`}>
       {!periodId && (
-        <div className="bg-amber-50 border-b border-amber-200 px-4 py-3 flex items-center gap-2 text-sm text-amber-700">
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-3 flex items-center gap-2 text-sm text-amber-400">
           <span>⚠️</span>
           <span>Select a period from the top bar before adding products to the board.</span>
         </div>
       )}
-      <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
+      <div className={`p-4 border-b ${t.divider} ${t.bar}/50 flex items-center justify-between`}>
         <div>
-          <h3 className="font-bold text-gray-900">Select Products for this Week</h3>
-          <p className="text-xs text-gray-500">Only selected products will appear on the Workflow Board.</p>
+          <h3 className={`font-bold ${t.t1}`}>Select Products for this Week</h3>
+          <p className={`text-xs ${t.t3}`}>Only selected products will appear on the Workflow Board.</p>
         </div>
-        <input 
+        <input
           value={filter} onChange={e => setFilter(e.target.value)}
           placeholder="Search products..."
-          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 w-64"
+          className={`border ${t.divider} rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 w-64 ${t.inp}`}
         />
       </div>
       <div className="flex-1 overflow-y-auto p-2">
         {loadingProducts && (
-          <div className="flex items-center justify-center py-16 text-gray-400 text-sm">Loading products...</div>
+          <div className={`flex items-center justify-center py-16 ${t.t4} text-sm`}>Loading products...</div>
         )}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
           {!loadingProducts && filtered.map(p => {
             const isSelected = selectedProductNos.has(p.product_no);
             return (
-              <label key={p.product_no} className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${!periodId ? "cursor-not-allowed opacity-60" : "cursor-pointer"} ${isSelected ? "border-violet-300 bg-violet-50/50 ring-1 ring-violet-200" : "border-gray-100 hover:border-gray-300 hover:bg-gray-50"}`}>
+              <label key={p.product_no} className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${!periodId ? "cursor-not-allowed opacity-60" : "cursor-pointer"} ${isSelected ? `border-violet-400 ${t.accentSoft} ring-1 ring-violet-500/20` : `${t.divider} hover:${t.bar}`}`}>
                 <input
                   type="checkbox"
                   checked={isSelected}
@@ -1346,15 +1339,15 @@ function ProductSelectionPanel({
                   className="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500"
                 />
                 {p.image_url ? (
-                  <img src={p.image_url} alt="" className="w-10 h-10 rounded-lg object-cover border border-gray-200 shrink-0" />
+                  <img src={p.image_url} alt="" className={`w-10 h-10 rounded-lg object-cover border ${t.divider} shrink-0`} />
                 ) : (
-                  <div className="w-10 h-10 rounded-lg bg-gray-100 shrink-0 flex items-center justify-center text-gray-300 text-xs font-bold">#{p.product_no}</div>
+                  <div className={`w-10 h-10 rounded-lg ${t.bar} shrink-0 flex items-center justify-center ${t.t5} text-xs font-bold`}>#{p.product_no}</div>
                 )}
                 <div className="min-w-0">
-                  <div className="text-sm font-bold text-gray-900 leading-tight">#{p.product_no}</div>
-                  <div className="text-[10px] text-gray-500 truncate mt-0.5">{p.warehouse_name || "No name"}</div>
+                  <div className={`text-sm font-bold ${t.t1} leading-tight`}>#{p.product_no}</div>
+                  <div className={`text-[10px] ${t.t3} truncate mt-0.5`}>{p.warehouse_name || "No name"}</div>
                 </div>
-                {saving === p.product_no && <div className="ml-auto text-violet-600 text-xs font-bold">...</div>}
+                {saving === p.product_no && <div className={`ml-auto ${t.accentTxt} text-xs font-bold`}>...</div>}
               </label>
             );
           })}
@@ -1366,6 +1359,7 @@ function ProductSelectionPanel({
 
 // ─── Progress tab ─────────────────────────────────────────────────────────────
 function ProgressPanel({ storeCode }: { storeCode: string }) {
+  const { theme: t } = useTheme();
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<string>("gmv");
@@ -1386,7 +1380,7 @@ function ProgressPanel({ storeCode }: { storeCode: string }) {
 
   function DeltaBadge({ cur, prev, isPercent }: { cur: number | null; prev: number | null; isPercent?: boolean }) {
     const d = delta(cur, prev);
-    if (d == null) return <span className="text-gray-300 text-xs">—</span>;
+    if (d == null) return <span className={`${t.t5} text-xs`}>—</span>;
     const up = d >= 0;
     return (
       <span className={`text-xs font-semibold ${up ? "text-emerald-600" : "text-red-500"}`}>
@@ -1396,14 +1390,14 @@ function ProgressPanel({ storeCode }: { storeCode: string }) {
   }
 
   function fmt(v: number | null, prefix = "") {
-    if (v == null) return <span className="text-gray-300">—</span>;
+    if (v == null) return <span className={`${t.t5}`}>—</span>;
     if (v >= 1000000) return <>{prefix}{(v / 1000000).toFixed(1)}M</>;
     if (v >= 1000) return <>{prefix}{(v / 1000).toFixed(1)}K</>;
     return <>{prefix}{v.toLocaleString()}</>;
   }
 
   function fmtPct(v: number | null) {
-    if (v == null) return <span className="text-gray-300">—</span>;
+    if (v == null) return <span className={`${t.t5}`}>—</span>;
     return <>{(v * 100).toFixed(2)}%</>;
   }
 
@@ -1416,7 +1410,7 @@ function ProgressPanel({ storeCode }: { storeCode: string }) {
   function SortTh({ label, k }: { label: string; k: string }) {
     const active = sortKey === k;
     return (
-      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-400 uppercase cursor-pointer hover:text-gray-700 whitespace-nowrap"
+      <th className={`px-3 py-2 text-left text-xs font-semibold ${t.t4} uppercase cursor-pointer hover:${t.t2} whitespace-nowrap`}
         onClick={() => { if (active) setSortDir(d => d === "desc" ? "asc" : "desc"); else { setSortKey(k); setSortDir("desc"); } }}>
         {label}{active ? (sortDir === "desc" ? " ↓" : " ↑") : ""}
       </th>
@@ -1429,77 +1423,77 @@ function ProgressPanel({ storeCode }: { storeCode: string }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-bold text-gray-900">📈 Optimization Progress</h2>
-          <p className="text-xs text-gray-400 mt-0.5">
+          <h2 className={`text-lg font-bold ${t.t1}`}>📈 Optimization Progress</h2>
+          <p className={`text-xs ${t.t4} mt-0.5`}>
             Comparing latest TikTok export vs previous import per product.
             {!hasPrev && rows.length > 0 && <span className="ml-2 text-amber-500">⚠ Only one import found — upload a second period to see deltas.</span>}
           </p>
         </div>
-        <div className="text-xs text-gray-400">{rows.length} products</div>
+        <div className={`text-xs ${t.t4}`}>{rows.length} products</div>
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center h-48 text-gray-400">Loading…</div>
+        <div className={`flex items-center justify-center h-48 ${t.t4}`}>Loading…</div>
       ) : rows.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-48 text-gray-400 bg-white rounded-xl border border-gray-100">
+        <div className={`flex flex-col items-center justify-center h-48 ${t.t4} ${t.card} rounded-xl`}>
           <p className="text-lg mb-1">No TikTok analytics data yet</p>
           <p className="text-sm">Upload a TikTok export in <strong>Data & Uploads → 📈 TikTok Analytics</strong></p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className={`${t.card} rounded-xl overflow-hidden`}>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-100">
+              <thead className={`${t.bar} border-b ${t.divider}`}>
                 <tr>
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-400 uppercase sticky left-0 bg-gray-50">Product</th>
-                  <th className="px-3 py-2 text-xs font-semibold text-gray-400 uppercase text-center">Period</th>
+                  <th className={`px-3 py-2 text-left text-xs font-semibold ${t.t4} uppercase sticky left-0 ${t.bar.split(" ")[0]}`}>Product</th>
+                  <th className={`px-3 py-2 text-xs font-semibold ${t.t4} uppercase text-center`}>Period</th>
                   <SortTh label="GMV" k="gmv" />
-                  <th className="px-2 py-2 text-xs text-gray-300 uppercase">vs prev</th>
+                  <th className={`px-2 py-2 text-xs ${t.t5} uppercase`}>vs prev</th>
                   <SortTh label="Orders" k="orders" />
-                  <th className="px-2 py-2 text-xs text-gray-300 uppercase">vs prev</th>
+                  <th className={`px-2 py-2 text-xs ${t.t5} uppercase`}>vs prev</th>
                   <SortTh label="Impressions" k="impressions" />
-                  <th className="px-2 py-2 text-xs text-gray-300 uppercase">vs prev</th>
+                  <th className={`px-2 py-2 text-xs ${t.t5} uppercase`}>vs prev</th>
                   <SortTh label="CTR" k="ctr" />
-                  <th className="px-2 py-2 text-xs text-gray-300 uppercase">vs prev</th>
+                  <th className={`px-2 py-2 text-xs ${t.t5} uppercase`}>vs prev</th>
                   <SortTh label="CTOR" k="ctor" />
-                  <th className="px-2 py-2 text-xs text-gray-300 uppercase">vs prev</th>
+                  <th className={`px-2 py-2 text-xs ${t.t5} uppercase`}>vs prev</th>
                   <SortTh label="Items Sold" k="items_sold" />
-                  <th className="px-2 py-2 text-xs text-gray-300 uppercase">vs prev</th>
-                  <th className="px-3 py-2 text-xs font-semibold text-gray-400 uppercase">Status</th>
+                  <th className={`px-2 py-2 text-xs ${t.t5} uppercase`}>vs prev</th>
+                  <th className={`px-3 py-2 text-xs font-semibold ${t.t4} uppercase`}>Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className={`divide-y ${t.divider}`}>
                 {sorted.map((r, i) => (
-                  <tr key={r.product_no} className={`hover:bg-violet-50/20 transition-colors ${i % 2 === 0 ? "" : "bg-gray-50/30"}`}>
-                    <td className="px-3 py-2 sticky left-0 bg-white">
+                  <tr key={r.product_no} className={`hover:bg-violet-500/10 transition-colors ${i % 2 !== 0 ? t.bar : ""}`}>
+                    <td className={`px-3 py-2 sticky left-0 ${t.card.split(" ")[0]}`}>
                       <div className="flex items-center gap-2 min-w-[160px]">
                         {r.image_url
-                          ? <img src={r.image_url} className="w-9 h-9 rounded-lg object-cover border border-gray-100 shrink-0" />
-                          : <div className="w-9 h-9 rounded-lg bg-gray-100 shrink-0" />}
+                          ? <img src={r.image_url} className={`w-9 h-9 rounded-lg object-cover border ${t.divider} shrink-0`} />
+                          : <div className={`w-9 h-9 rounded-lg ${t.bar} shrink-0`} />}
                         <div>
-                          <div className="font-semibold text-gray-800 text-xs">#{r.product_no}</div>
-                          {r.warehouse_name && <div className="text-[10px] text-gray-400 truncate max-w-[110px]">{r.warehouse_name}</div>}
+                          <div className={`font-semibold ${t.t1} text-xs`}>#{r.product_no}</div>
+                          {r.warehouse_name && <div className={`text-[10px] ${t.t4} truncate max-w-[110px]`}>{r.warehouse_name}</div>}
                         </div>
                       </div>
                     </td>
                     <td className="px-3 py-2 text-center">
-                      <div className="text-[10px] text-gray-500 whitespace-nowrap">{r.period_start} →</div>
-                      <div className="text-[10px] text-gray-500 whitespace-nowrap">{r.period_end}</div>
+                      <div className={`text-[10px] ${t.t3} whitespace-nowrap`}>{r.period_start} →</div>
+                      <div className={`text-[10px] ${t.t3} whitespace-nowrap`}>{r.period_end}</div>
                       {r.prev_period_start && (
-                        <div className="text-[9px] text-gray-300 mt-0.5">prev: {r.prev_period_start}</div>
+                        <div className={`text-[9px] ${t.t5} mt-0.5`}>prev: {r.prev_period_start}</div>
                       )}
                     </td>
-                    <td className="px-3 py-2 font-semibold text-gray-800 text-right">{fmt(r.gmv, "$")}</td>
+                    <td className={`px-3 py-2 font-semibold ${t.t1} text-right`}>{fmt(r.gmv, "$")}</td>
                     <td className="px-2 py-2 text-right"><DeltaBadge cur={r.gmv} prev={r.prev_gmv} /></td>
-                    <td className="px-3 py-2 text-right text-gray-700">{fmt(r.orders)}</td>
+                    <td className={`px-3 py-2 text-right ${t.t2}`}>{fmt(r.orders)}</td>
                     <td className="px-2 py-2 text-right"><DeltaBadge cur={r.orders} prev={r.prev_orders} /></td>
-                    <td className="px-3 py-2 text-right text-gray-700">{fmt(r.impressions)}</td>
+                    <td className={`px-3 py-2 text-right ${t.t2}`}>{fmt(r.impressions)}</td>
                     <td className="px-2 py-2 text-right"><DeltaBadge cur={r.impressions} prev={r.prev_impressions} /></td>
-                    <td className="px-3 py-2 text-right text-gray-700">{fmtPct(r.ctr)}</td>
+                    <td className={`px-3 py-2 text-right ${t.t2}`}>{fmtPct(r.ctr)}</td>
                     <td className="px-2 py-2 text-right"><DeltaBadge cur={r.ctr} prev={r.prev_ctr} /></td>
-                    <td className="px-3 py-2 text-right text-gray-700">{fmtPct(r.ctor)}</td>
+                    <td className={`px-3 py-2 text-right ${t.t2}`}>{fmtPct(r.ctor)}</td>
                     <td className="px-2 py-2 text-right"><DeltaBadge cur={r.ctor} prev={r.prev_ctor} /></td>
-                    <td className="px-3 py-2 text-right text-gray-700">{fmt(r.items_sold)}</td>
+                    <td className={`px-3 py-2 text-right ${t.t2}`}>{fmt(r.items_sold)}</td>
                     <td className="px-2 py-2 text-right"><DeltaBadge cur={r.items_sold} prev={r.prev_items_sold} /></td>
                     <td className="px-3 py-2">
                       {r.listing_status && (
@@ -1534,6 +1528,7 @@ function DataUploadPanel({
 }: {
   storeCode: string; onImported: () => void;
 }) {
+  const { theme: t } = useTheme();
   const [activeTab, setActiveTab] = useState<"analytics" | "orders" | "tiktok">("analytics");
   const [analyticsFile, setAnalyticsFile] = useState<File | null>(null);
   const [ordersFile, setOrdersFile] = useState<File | null>(null);
@@ -1610,12 +1605,12 @@ function DataUploadPanel({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="flex border-b border-gray-100">
-        {(["analytics", "orders", "tiktok"] as const).map(t => (
-          <button key={t} onClick={() => { setActiveTab(t); setStatus("idle"); setMsg(""); }}
-            className={`px-5 py-3 text-sm font-medium transition-colors ${activeTab === t ? "text-violet-600 border-b-2 border-violet-600 bg-violet-50/40" : "text-gray-500 hover:bg-gray-50"}`}>
-            {t === "analytics" ? "📊 Analytics / Work Flow Excel" : t === "orders" ? "📦 Orders Sheet" : "📈 TikTok Analytics"}
+    <div className={`${t.card} rounded-xl overflow-hidden`}>
+      <div className={`flex border-b ${t.divider}`}>
+        {(["analytics", "orders", "tiktok"] as const).map(tb => (
+          <button key={tb} onClick={() => { setActiveTab(tb); setStatus("idle"); setMsg(""); }}
+            className={`px-5 py-3 text-sm font-medium transition-colors ${activeTab === tb ? `text-violet-600 border-b-2 border-violet-600 ${t.accentSoft}` : `${t.t3} hover:${t.bar}`}`}>
+            {tb === "analytics" ? "📊 Analytics / Work Flow Excel" : tb === "orders" ? "📦 Orders Sheet" : "📈 TikTok Analytics"}
           </button>
         ))}
       </div>
@@ -1623,12 +1618,12 @@ function DataUploadPanel({
       <div className="p-5">
         {activeTab === "analytics" ? (
           <>
-            <p className="text-sm text-gray-500 mb-4">
+            <p className={`text-sm ${t.t3} mb-4`}>
               Upload your <strong>Work Flow EC BU 1.xlsx</strong> file. It will auto-import task statuses, performance metrics, and notes for all weeks inside.
             </p>
             <input type="file" accept=".xlsx,.xls"
               onChange={e => { setAnalyticsFile(e.target.files?.[0] ?? null); setStatus("idle"); setMsg(""); }}
-              className="w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-gray-200 file:text-sm file:font-medium file:bg-gray-50 hover:file:bg-gray-100 mb-3" />
+              className={`w-full text-sm ${t.t3} file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border ${t.divider} file:text-sm file:font-medium ${t.inp} mb-3`} />
             {msg && <p className={`text-sm px-3 py-2 rounded-lg mb-3 ${status === "done" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>{msg}</p>}
             <button onClick={uploadAnalytics} disabled={!analyticsFile || status === "loading"}
               className="bg-violet-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-violet-700 disabled:opacity-50 font-medium">
@@ -1637,12 +1632,12 @@ function DataUploadPanel({
           </>
         ) : activeTab === "tiktok" ? (
           <>
-            <p className="text-sm text-gray-500 mb-4">
+            <p className={`text-sm ${t.t3} mb-4`}>
               Upload a TikTok product analytics export file (<strong>product_list_All_*.xlsx</strong>). Products are matched by TikTok Product ID and metrics are available on each product card.
             </p>
             <input type="file" accept=".xlsx,.xls"
               onChange={e => { setTiktokFile(e.target.files?.[0] ?? null); setStatus("idle"); setMsg(""); }}
-              className="w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-gray-200 file:text-sm file:font-medium file:bg-gray-50 hover:file:bg-gray-100 mb-3" />
+              className={`w-full text-sm ${t.t3} file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border ${t.divider} file:text-sm file:font-medium ${t.inp} mb-3`} />
             {msg && <p className={`text-sm px-3 py-2 rounded-lg mb-3 ${status === "done" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>{msg}</p>}
             <button onClick={uploadTiktok} disabled={!tiktokFile || status === "loading"}
               className="bg-violet-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-violet-700 disabled:opacity-50 font-medium">
@@ -1651,14 +1646,14 @@ function DataUploadPanel({
 
             {tkPeriods.length > 0 && (
               <div className="mt-5">
-                <h4 className="text-xs font-semibold text-gray-400 uppercase mb-2">Imported Periods</h4>
+                <h4 className={`text-xs font-semibold ${t.t4} uppercase mb-2`}>Imported Periods</h4>
                 <div className="space-y-1.5">
                   {tkPeriods.map((p, i) => (
                     <div key={i} className="flex items-center gap-3 text-xs bg-sky-50 rounded-lg px-3 py-2">
                       <span className="font-medium text-sky-700">{p.period_start} → {p.period_end}</span>
                       <span className="text-sky-500 ml-auto">{p.product_count} products</span>
                       <span className="text-sky-400">${p.total_gmv.toLocaleString(undefined, { maximumFractionDigits: 0 })} GMV</span>
-                      <span className="text-gray-400">{new Date(p.imported_at).toLocaleDateString()}</span>
+                      <span className={`${t.t4}`}>{new Date(p.imported_at).toLocaleDateString()}</span>
                     </div>
                   ))}
                 </div>
@@ -1667,14 +1662,14 @@ function DataUploadPanel({
           </>
         ) : (
           <>
-            <p className="text-sm text-gray-500 mb-4">
+            <p className={`text-sm ${t.t3} mb-4`}>
               Upload an orders export from TikTok Shop. This records the file for your team's reference.
             </p>
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
-                <label className="text-xs text-gray-500 block mb-1">File Type</label>
+                <label className={`text-xs ${t.t3} block mb-1`}>File Type</label>
                 <select value={ordersType} onChange={e => setOrdersType(e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-400">
+                  className={`w-full border rounded-lg px-3 py-2 text-sm ${t.inp} focus:outline-none focus:ring-2 focus:ring-violet-400`}>
                   <option value="orders">All Orders</option>
                   <option value="traffic">Traffic Data</option>
                   <option value="affiliate">Affiliate Report</option>
@@ -1682,15 +1677,15 @@ function DataUploadPanel({
                 </select>
               </div>
               <div>
-                <label className="text-xs text-gray-500 block mb-1">Period (optional)</label>
+                <label className={`text-xs ${t.t3} block mb-1`}>Period (optional)</label>
                 <input value={periodLabel} onChange={e => setPeriodLabel(e.target.value)}
                   placeholder="e.g. Apr 20–26"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400" />
+                  className={`w-full border rounded-lg px-3 py-2 text-sm ${t.inp} focus:outline-none focus:ring-2 focus:ring-violet-400`} />
               </div>
             </div>
             <input type="file" accept=".xlsx,.xls,.csv"
               onChange={e => { setOrdersFile(e.target.files?.[0] ?? null); setStatus("idle"); setMsg(""); }}
-              className="w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-gray-200 file:text-sm file:font-medium file:bg-gray-50 hover:file:bg-gray-100 mb-3" />
+              className={`w-full text-sm ${t.t3} file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border ${t.divider} file:text-sm file:font-medium ${t.inp} mb-3`} />
             {msg && <p className={`text-sm px-3 py-2 rounded-lg mb-3 ${status === "done" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>{msg}</p>}
             <button onClick={uploadOrders} disabled={!ordersFile || status === "loading"}
               className="bg-violet-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-violet-700 disabled:opacity-50 font-medium">
@@ -1700,15 +1695,15 @@ function DataUploadPanel({
             {/* History */}
             {history.length > 0 && (
               <div className="mt-5">
-                <h4 className="text-xs font-semibold text-gray-400 uppercase mb-2">Upload History</h4>
+                <h4 className={`text-xs font-semibold ${t.t4} uppercase mb-2`}>Upload History</h4>
                 <div className="space-y-1.5">
                   {history.map(u => (
-                    <div key={u.id} className="flex items-center gap-3 text-xs bg-gray-50 rounded-lg px-3 py-2 group hover:bg-gray-100 transition-colors">
-                      <span className="bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-medium capitalize shrink-0 w-16 text-center">{u.upload_type}</span>
-                      <span className="font-medium text-gray-700 truncate flex-1">{u.filename}</span>
-                      {u.period_label && <span className="text-gray-400 shrink-0 w-24">{u.period_label}</span>}
-                      <span className="text-gray-400 shrink-0 w-16 text-right">{u.row_count} rows</span>
-                      <span className="text-gray-400 shrink-0 w-20 text-right">{new Date(u.imported_at).toLocaleDateString()}</span>
+                    <div key={u.id} className={`flex items-center gap-3 text-xs ${t.bar} rounded-lg px-3 py-2 group hover:bg-violet-500/10 transition-colors`}>
+                      <span className={`${t.card2} ${t.t2} px-1.5 py-0.5 rounded font-medium capitalize shrink-0 w-16 text-center`}>{u.upload_type}</span>
+                      <span className={`font-medium ${t.t2} truncate flex-1`}>{u.filename}</span>
+                      {u.period_label && <span className={`${t.t4} shrink-0 w-24`}>{u.period_label}</span>}
+                      <span className={`${t.t4} shrink-0 w-16 text-right`}>{u.row_count} rows</span>
+                      <span className={`${t.t4} shrink-0 w-20 text-right`}>{new Date(u.imported_at).toLocaleDateString()}</span>
                       <button 
                         onClick={async () => {
                           if (confirm("Delete this upload record?")) {
@@ -1736,6 +1731,7 @@ function DataUploadPanel({
 function PeriodModal({ storeCode, onClose, onCreated }: {
   storeCode: string; onClose: () => void; onCreated: (p: Period) => void;
 }) {
+  const { theme: t } = useTheme();
   const [start, setStart] = useState(""); const [end, setEnd] = useState("");
   const [label, setLabel] = useState(""); const [saving, setSaving] = useState(false); const [error, setError] = useState("");
   async function create() {
@@ -1749,27 +1745,27 @@ function PeriodModal({ storeCode, onClose, onCreated }: {
   }
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-2xl shadow-2xl w-80 mx-4">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h3 className="font-semibold">New Period</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+      <div className={`${t.card} rounded-2xl shadow-2xl w-80 mx-4`}>
+        <div className={`flex items-center justify-between px-5 py-4 border-b ${t.divider}`}>
+          <h3 className={`font-semibold ${t.t1}`}>New Period</h3>
+          <button onClick={onClose} className={`${t.t4} hover:${t.t1} text-xl`}>×</button>
         </div>
         <div className="p-5 space-y-3">
-          <div><label className="text-xs font-medium text-gray-500 block mb-1">Start Date</label>
+          <div><label className={`text-xs font-medium ${t.t3} block mb-1`}>Start Date</label>
             <input type="date" value={start} onChange={e => setStart(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400" /></div>
-          <div><label className="text-xs font-medium text-gray-500 block mb-1">End Date</label>
+              className={`w-full border rounded-lg px-3 py-2 text-sm ${t.inp} focus:outline-none focus:ring-2 focus:ring-violet-400`} /></div>
+          <div><label className={`text-xs font-medium ${t.t3} block mb-1`}>End Date</label>
             <input type="date" value={end} onChange={e => setEnd(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400" /></div>
-          <div><label className="text-xs font-medium text-gray-500 block mb-1">Label (optional)</label>
+              className={`w-full border rounded-lg px-3 py-2 text-sm ${t.inp} focus:outline-none focus:ring-2 focus:ring-violet-400`} /></div>
+          <div><label className={`text-xs font-medium ${t.t3} block mb-1`}>Label (optional)</label>
             <input type="text" value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. Jan 12–18"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400" /></div>
+              className={`w-full border rounded-lg px-3 py-2 text-sm ${t.inp} focus:outline-none focus:ring-2 focus:ring-violet-400`} /></div>
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
-        <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
-          <button onClick={onClose} className="px-3 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
+        <div className={`px-5 py-4 border-t ${t.divider} flex justify-end gap-2`}>
+          <button onClick={onClose} className={`px-3 py-2 text-sm ${t.btnAlt} rounded-lg`}>Cancel</button>
           <button onClick={create} disabled={saving}
-            className="px-3 py-2 text-sm bg-violet-600 text-white font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50">
+            className={`px-3 py-2 text-sm ${t.btn} rounded-lg disabled:opacity-50`}>
             {saving ? "Creating…" : "Create"}
           </button>
         </div>
@@ -1783,6 +1779,7 @@ function TaskCell({ taskKey, task, product, periodId, storeCode, users, onOptimi
   taskKey: string; task: TaskInfo | undefined; product: Product; periodId: number;
   storeCode: string; users: User[]; onOptimisticUpdate: (updates: Partial<TaskInfo>) => void;
 }) {
+  const { theme: t } = useTheme();
   const status = task?.status ?? "todo";
   const cfg = STATUS_CONFIG[status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.todo;
   const [saving, setSaving] = useState(false);
@@ -1828,14 +1825,14 @@ function TaskCell({ taskKey, task, product, periodId, storeCode, users, onOptimi
           <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
           {cfg.label}
         </button>
-        {task?.assigned_name && <div className="text-xs text-gray-400 mt-0.5 truncate max-w-[80px]">{task.assigned_name}</div>}
+        {task?.assigned_name && <div className={`text-xs ${t.t4} mt-0.5 truncate max-w-[80px]`}>{task.assigned_name}</div>}
         {showDrop && (
-          <div className="absolute z-50 left-0 top-full mt-1 w-44 bg-white border border-gray-200 rounded-lg shadow-lg text-left py-1">
-            <div className="px-3 py-1.5 text-xs font-semibold text-gray-400 uppercase border-b border-gray-100">Assign to</div>
-            <button onClick={() => assignUser(null)} className="w-full px-3 py-2 text-sm text-left hover:bg-gray-50 text-gray-500">Unassign</button>
+          <div className={`absolute z-50 left-0 top-full mt-1 w-44 ${t.card} rounded-lg shadow-lg text-left py-1`}>
+            <div className={`px-3 py-1.5 text-xs font-semibold ${t.t4} uppercase border-b ${t.divider}`}>Assign to</div>
+            <button onClick={() => assignUser(null)} className={`w-full px-3 py-2 text-sm text-left hover:${t.bar} ${t.t3}`}>Unassign</button>
             {users.map(u => (
               <button key={u.id} onClick={() => assignUser(u.id)}
-                className={`w-full px-3 py-2 text-sm text-left hover:bg-violet-50 hover:text-violet-700 ${task?.assigned_to === u.id ? "bg-violet-50 text-violet-700 font-medium" : ""}`}>
+                className={`w-full px-3 py-2 text-sm text-left hover:${t.accentSoft} ${task?.assigned_to === u.id ? `${t.accentSoft} font-medium` : t.t2}`}>
                 {u.name}
               </button>
             ))}
@@ -1856,6 +1853,7 @@ function BoardRow({ product, taskTypes, periodId, storeCode, users, onUpdated, o
   index: number; zebra: boolean; hiddenCols: Set<string>;
   selected: boolean; onToggleSelect: () => void;
 }) {
+  const { theme: t } = useTheme();
   const tk = product.tk_export;
   const a = {
     ...product.analytics,
@@ -1885,67 +1883,67 @@ function BoardRow({ product, taskTypes, periodId, storeCode, users, onUpdated, o
         const src = e.dataTransfer.getData("text/plain");
         if (src) onDropRow(src, product.product_no);
       }}
-      className={`border-b border-gray-100 hover:bg-violet-50/30 transition-colors ${selected ? "bg-violet-50/60" : zebra ? "bg-gray-50/50" : ""}`}
+      className={`border-b ${t.divider} hover:bg-violet-500/10 transition-colors ${selected ? "bg-violet-500/10" : zebra ? `${t.bar}/50` : ""}`}
     >
-      <td className={`px-2 py-2 ${selected ? "bg-violet-50" : zebra ? "bg-gray-50" : "bg-white"}`}>
+      <td className={`px-2 py-2 ${selected ? "bg-violet-500/10" : zebra ? t.bar : t.card.split(" ")[0]}`}>
         <input type="checkbox" checked={selected} onChange={onToggleSelect}
           className="w-4 h-4 rounded text-violet-600 border-gray-300 focus:ring-violet-500" />
       </td>
-      <td className={`px-3 py-2 sticky left-0 z-10 ${selected ? "bg-violet-50" : zebra ? "bg-gray-50" : "bg-white"} border-r border-gray-100`}>
+      <td className={`px-3 py-2 sticky left-0 z-10 ${selected ? "bg-violet-500/10" : zebra ? t.bar : t.card.split(" ")[0]} border-r ${t.divider}`}>
         <div className="flex items-center gap-2.5">
-          <div className="flex flex-col items-center gap-1 text-gray-300 w-6">
-            <span className="cursor-move hover:text-gray-600 font-bold" title="Drag to reorder">⠿</span>
-            <span className="text-[10px] font-bold text-gray-400">#{index + 1}</span>
-            <button onClick={onHide} title="Delete product" className="text-red-300 hover:text-red-500 hover:bg-red-50 rounded px-1 mt-0.5">🗑️</button>
+          <div className={`flex flex-col items-center gap-1 ${t.t5} w-6`}>
+            <span className={`cursor-move hover:${t.t2} font-bold`} title="Drag to reorder">⠿</span>
+            <span className={`text-[10px] font-bold ${t.t4}`}>#{index + 1}</span>
+            <button onClick={onHide} title="Delete product" className="text-red-400 hover:text-red-500 hover:bg-red-500/10 rounded px-1 mt-0.5">🗑️</button>
           </div>
           {product.image_url ? (
-            <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-gray-100">
+            <div className={`w-10 h-10 rounded-lg overflow-hidden shrink-0 border ${t.divider}`}>
               <img src={product.image_url} alt={product.product_no} className="w-full h-full object-cover"
                 onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
             </div>
           ) : (
-            <div className="w-10 h-10 rounded-lg bg-gray-100 shrink-0 flex items-center justify-center text-gray-300 text-lg">□</div>
+            <div className={`w-10 h-10 rounded-lg ${t.bar} shrink-0 flex items-center justify-center ${t.t5} text-lg`}>□</div>
           )}
           <div className="min-w-0">
-            <div className="font-semibold text-gray-800 text-xs">#{product.product_no}</div>
-            {product.warehouse_name && <div className="text-xs text-gray-400 truncate max-w-[130px]" title={product.warehouse_name}>{product.warehouse_name}</div>}
+            <div className={`font-semibold ${t.t1} text-xs`}>#{product.product_no}</div>
+            {product.warehouse_name && <div className={`text-xs ${t.t4} truncate max-w-[130px]`} title={product.warehouse_name}>{product.warehouse_name}</div>}
           </div>
         </div>
       </td>
 
-      {taskTypes.map(t => !hiddenCols.has(t) && (
-        <TaskCell key={t} taskKey={t} task={product.tasks[t]} product={product}
-          periodId={periodId} storeCode={storeCode} users={users} onOptimisticUpdate={u => onTaskUpdate(t, u)} />
+      {taskTypes.map(tk => !hiddenCols.has(tk) && (
+        <TaskCell key={tk} taskKey={tk} task={product.tasks[tk]} product={product}
+          periodId={periodId} storeCode={storeCode} users={users} onOptimisticUpdate={u => onTaskUpdate(tk, u)} />
       ))}
 
       {/* Inline-editable analytics */}
       {!hiddenCols.has("impressions") && (
-        <td className="px-2 py-1.5 text-right text-xs text-gray-600">
+        <td className={`px-2 py-1.5 text-right text-xs ${t.t2}`}>
           <EditCell value={a.impressions} display={fmt(a.impressions)} onSave={v => saveMetric("impressions", v)} />
         </td>
       )}
       {!hiddenCols.has("ctr") && (
-        <td className="px-2 py-1.5 text-right text-xs text-gray-600">
+        <td className={`px-2 py-1.5 text-right text-xs ${t.t2}`}>
           <EditCell value={a.ctr} display={pct(a.ctr)} onSave={v => saveMetric("ctr", v)} isPercent />
         </td>
       )}
       {!hiddenCols.has("cvr") && (
-        <td className="px-2 py-1.5 text-right text-xs text-gray-600">
+        <td className={`px-2 py-1.5 text-right text-xs ${t.t2}`}>
           <EditCell value={a.cvr} display={pct(a.cvr)} onSave={v => saveMetric("cvr", v)} isPercent />
         </td>
       )}
       {!hiddenCols.has("items_sold") && (
-        <td className="px-2 py-1.5 text-right text-xs text-gray-600">
+        <td className={`px-2 py-1.5 text-right text-xs ${t.t2}`}>
           <EditCell value={a.items_sold} display={fmt(a.items_sold)} onSave={v => saveMetric("items_sold", v)} />
         </td>
       )}
       {!hiddenCols.has("gmv") && (
-        <td className="px-2 py-1.5 text-right text-xs font-medium text-gray-700">
+        <td className={`px-2 py-1.5 text-right text-xs font-medium ${t.t1}`}>
           <EditCell value={a.gmv} display={a.gmv != null ? `$${fmt(a.gmv, 0)}` : "–"} onSave={v => saveMetric("gmv", v)} prefix="$" />
         </td>
       )}
       {!hiddenCols.has("roi") && (
-        <td className="px-2 py-1.5 text-right text-xs text-gray-600">
+        <td className={`px-2 py-1.5 text-right text-xs ${t.t2}`}>
           <EditCell value={a.roi} display={a.roi != null ? `${a.roi.toFixed(1)}x` : "–"} onSave={v => saveMetric("roi", v)} />
         </td>
       )}
@@ -1974,6 +1972,7 @@ function BoardRow({ product, taskTypes, periodId, storeCode, users, onUpdated, o
 export default function BoardPage() {
   const router = useRouter();
   const params = useParams();
+  const { theme: t } = useTheme();
   const storeCode = (params?.store as string ?? "TK1").toUpperCase();
 
   const [tab, setTab] = useState<"board" | "data" | "selection" | "team" | "progress">("board");
@@ -2131,42 +2130,42 @@ export default function BoardPage() {
   const pctDone = total > 0 ? Math.round((done / total) * 100) : 0;
 
   return (
-    <div className="flex min-h-screen">
+    <>
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0">
 
         {/* Header */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4 shrink-0">
+        <div className={`${t.topbar} px-6 py-4 shrink-0`}>
           <div className="flex flex-wrap items-center gap-3">
             <div className={`w-8 h-8 rounded-lg ${accentClass} flex items-center justify-center text-white font-bold text-sm shrink-0`}>
               {storeCode.slice(-1)}
             </div>
             <div>
-              <h1 className="font-bold text-gray-900">{STORE_NAMES[storeCode] || storeCode}</h1>
-              <p className="text-xs text-gray-400">Workflow Board</p>
+              <h1 className={`font-bold ${t.t1}`}>{STORE_NAMES[storeCode] || storeCode}</h1>
+              <p className={`text-xs ${t.t4}`}>Workflow Board</p>
             </div>
 
             {/* Tabs */}
             <div className="ml-4 flex gap-1">
-              {(["board", "team", "selection", "progress", "data"] as const).map(t => (
-                <button key={t} onClick={() => setTab(t)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === t ? "bg-violet-100 text-violet-700" : "text-gray-500 hover:bg-gray-100"}`}>
-                  {t === "board" ? "📋 Board" : t === "team" ? "👥 Team" : t === "selection" ? "✅ Selection" : t === "progress" ? "📈 Progress" : "📁 Data & Uploads"}
+              {(["board", "team", "selection", "progress", "data"] as const).map(tb => (
+                <button key={tb} onClick={() => setTab(tb)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === tb ? `${t.accentSoft}` : `${t.t3} hover:${t.bar}`}`}>
+                  {tb === "board" ? "📋 Board" : tb === "team" ? "👥 Team" : tb === "selection" ? "✅ Selection" : tb === "progress" ? "📈 Progress" : "📁 Data & Uploads"}
                 </button>
               ))}
             </div>
 
             {/* Stats Bar */}
             {(tab === "board" || tab === "team") && stats.length > 0 && (
-              <div className="flex items-center gap-4 ml-6 pl-6 border-l border-gray-100 overflow-x-auto py-1 no-scrollbar">
+              <div className={`flex items-center gap-4 ml-6 pl-6 border-l ${t.divider} overflow-x-auto py-1 no-scrollbar`}>
                 {stats.map(s => (
                   <div key={s.id} className="flex flex-col items-center shrink-0">
                     <div className="flex items-center gap-1 leading-none mb-1">
-                      <span className="text-[10px] font-bold text-gray-400 uppercase">{s.name}</span>
+                      <span className={`text-[10px] font-bold ${t.t4} uppercase`}>{s.name}</span>
                       {s.role === "leader" && <span className="text-[8px] bg-blue-100 text-blue-600 px-1 rounded">L</span>}
                       {s.role === "junior" && <span className="text-[8px] bg-amber-100 text-amber-600 px-1 rounded">J</span>}
                     </div>
-                    <span className="text-sm font-bold text-violet-600 leading-none">{s.done_count} <span className="text-[10px] text-gray-400 font-normal">done</span></span>
+                    <span className={`text-sm font-bold ${t.accentTxt} leading-none`}>{s.done_count} <span className={`text-[10px] ${t.t4} font-normal`}>done</span></span>
                   </div>
                 ))}
               </div>
@@ -2177,14 +2176,14 @@ export default function BoardPage() {
                 <div className="ml-2 flex items-center gap-1">
                   <div className="relative">
                     <select value={selectedPeriodId ?? ""} onChange={e => setSelectedPeriodId(Number(e.target.value))}
-                      className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 bg-white pr-8">
+                      className={`border ${t.divider} rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 ${t.inp} pr-8`}>
                       {periods.length === 0 && <option value="">No periods yet</option>}
                       {periods.map(p => (
                         <option key={p.id} value={p.id}>{p.label}</option>
                       ))}
                     </select>
                   </div>
-                  <Link href="/weeks" className="text-slate-400 hover:text-violet-600 p-1.5 rounded-lg hover:bg-violet-50 transition-colors" title="Manage weeks">
+                  <Link href="/weeks" className={`${t.t4} hover:${t.accentTxt} p-1.5 rounded-lg hover:${t.bar} transition-colors`} title="Manage weeks">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
@@ -2199,15 +2198,15 @@ export default function BoardPage() {
                   )}
                 </div>
                 <button onClick={() => setShowPeriodModal(true)}
-                  className="text-sm border border-dashed border-gray-300 px-2.5 py-1.5 rounded-lg text-gray-500 hover:border-violet-400 hover:text-violet-600 transition-colors">
+                  className={`text-sm border border-dashed ${t.divider} px-2.5 py-1.5 rounded-lg ${t.t3} hover:border-violet-400 hover:${t.accentTxt} transition-colors`}>
                   + Period
                 </button>
 
                 <div className="ml-auto flex items-center gap-2">
                   <input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Search…"
-                    className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-36 focus:outline-none focus:ring-2 focus:ring-violet-400" />
+                    className={`border ${t.divider} rounded-lg px-3 py-1.5 text-sm w-36 focus:outline-none focus:ring-2 focus:ring-violet-400 ${t.inp}`} />
                   <button onClick={() => setShowAddProduct(true)}
-                    className="flex items-center gap-1.5 bg-violet-600 text-white text-sm px-3 py-1.5 rounded-lg hover:bg-violet-700 font-medium">
+                    className={`flex items-center gap-1.5 ${t.btn} text-sm px-3 py-1.5 rounded-lg font-medium`}>
                     + Add Product
                   </button>
                 </div>
@@ -2217,10 +2216,10 @@ export default function BoardPage() {
 
           {tab === "board" && total > 0 && (
             <div className="mt-3 flex items-center gap-3">
-              <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div className={`flex-1 h-1.5 ${t.bar} rounded-full overflow-hidden`}>
                 <div className="h-full bg-green-500 transition-all" style={{ width: `${pctDone}%` }} />
               </div>
-              <span className="text-xs text-gray-500 shrink-0">{done}/{total} tasks done ({pctDone}%)</span>
+              <span className={`text-xs ${t.t3} shrink-0`}>{done}/{total} tasks done ({pctDone}%)</span>
             </div>
           )}
           {tab === "board" && (
@@ -2234,26 +2233,26 @@ export default function BoardPage() {
                   { id: "has_analytics", label: "Has Analytics" }
                 ].map(f => (
                   <button key={f.id} onClick={() => setStatusFilter(f.id)}
-                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors shrink-0 ${statusFilter === f.id ? "bg-violet-600 text-white border-violet-600" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}>
+                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors shrink-0 ${statusFilter === f.id ? "bg-violet-600 text-white border-violet-600" : `${t.card} ${t.t3} border-${t.divider} hover:${t.bar}`}`}>
                     {f.label}
                   </button>
                 ))}
               </div>
-              
+
               <div className="relative shrink-0 z-50">
-                <button onClick={() => setShowColMenu(!showColMenu)} className="text-gray-500 hover:text-gray-700 text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 font-medium whitespace-nowrap">
+                <button onClick={() => setShowColMenu(!showColMenu)} className={`${t.t3} hover:${t.t1} text-xs px-2 py-1 rounded ${t.bar} hover:${t.card2} font-medium whitespace-nowrap`}>
                   Columns ⚙️
                 </button>
                 {showColMenu && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50 p-2">
-                    <div className="text-xs font-bold text-gray-400 mb-1 px-1 uppercase tracking-wider">Tasks</div>
-                    {taskTypes.map(t => (
-                      <label key={t} className="flex items-center gap-2 text-sm text-gray-700 px-1 py-1 hover:bg-gray-50 rounded cursor-pointer">
-                        <input type="checkbox" checked={!hiddenCols.has(t)} onChange={() => toggleCol(t)} className="rounded text-violet-600 focus:ring-violet-500" />
-                        {taskLabels[t] || t}
+                  <div className={`absolute right-0 mt-2 w-48 ${t.card} rounded-lg shadow-lg z-50 p-2`}>
+                    <div className={`text-xs font-bold ${t.t4} mb-1 px-1 uppercase tracking-wider`}>Tasks</div>
+                    {taskTypes.map(tk => (
+                      <label key={tk} className={`flex items-center gap-2 text-sm ${t.t2} px-1 py-1 hover:${t.bar} rounded cursor-pointer`}>
+                        <input type="checkbox" checked={!hiddenCols.has(tk)} onChange={() => toggleCol(tk)} className="rounded text-violet-600 focus:ring-violet-500" />
+                        {taskLabels[tk] || tk}
                       </label>
                     ))}
-                    <div className="text-xs font-bold text-gray-400 mt-2 mb-1 px-1 uppercase tracking-wider">Analytics</div>
+                    <div className={`text-xs font-bold ${t.t4} mt-2 mb-1 px-1 uppercase tracking-wider`}>Analytics</div>
                     {[
                       { id: "impressions", label: "Impressions" },
                       { id: "ctr", label: "CTR" },
@@ -2262,7 +2261,7 @@ export default function BoardPage() {
                       { id: "gmv", label: "GMV" },
                       { id: "roi", label: "ROI" }
                     ].map(col => (
-                      <label key={col.id} className="flex items-center gap-2 text-sm text-gray-700 px-1 py-1 hover:bg-gray-50 rounded cursor-pointer">
+                      <label key={col.id} className={`flex items-center gap-2 text-sm ${t.t2} px-1 py-1 hover:${t.bar} rounded cursor-pointer`}>
                         <input type="checkbox" checked={!hiddenCols.has(col.id)} onChange={() => toggleCol(col.id)} className="rounded text-violet-600 focus:ring-violet-500" />
                         {col.label}
                       </label>
@@ -2278,9 +2277,9 @@ export default function BoardPage() {
         <div className="flex-1 overflow-auto p-4">
           {tab === "team" ? (
             !selectedPeriodId ? (
-              <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+              <div className={`flex flex-col items-center justify-center h-64 ${t.t4}`}>
                 <p className="text-lg mb-2">Select a period to view team performance</p>
-                <button onClick={() => setShowPeriodModal(true)} className="bg-violet-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-violet-700">+ Create Period</button>
+                <button onClick={() => setShowPeriodModal(true)} className={`${t.btn} px-4 py-2 rounded-lg text-sm font-medium`}>+ Create Period</button>
               </div>
             ) : (
               <TeamPanel
@@ -2308,32 +2307,32 @@ export default function BoardPage() {
               <DataUploadPanel storeCode={storeCode} onImported={() => { loadPeriods(); loadBoard(); }} />
             </div>
           ) : !selectedPeriodId ? (
-            <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+            <div className={`flex flex-col items-center justify-center h-64 ${t.t4}`}>
               <p className="text-lg mb-2">No period selected</p>
               <div className="flex gap-3 mt-2">
-                <button onClick={() => setShowPeriodModal(true)} className="bg-violet-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-violet-700">+ Create Period</button>
-                <button onClick={() => setTab("data")} className="border border-gray-200 text-gray-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">↑ Import Excel</button>
+                <button onClick={() => setShowPeriodModal(true)} className={`${t.btn} px-4 py-2 rounded-lg text-sm font-medium`}>+ Create Period</button>
+                <button onClick={() => setTab("data")} className={`${t.btnAlt} px-4 py-2 rounded-lg text-sm font-medium`}>↑ Import Excel</button>
               </div>
             </div>
           ) : loading ? (
-            <div className="flex items-center justify-center h-64 text-gray-400">Loading board…</div>
+            <div className={`flex items-center justify-center h-64 ${t.t4}`}>Loading board…</div>
           ) : filteredProducts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+            <div className={`flex flex-col items-center justify-center h-64 ${t.t4}`}>
               <p className="text-lg mb-2">{filter ? "No products match" : "No products yet"}</p>
               {!filter && (
                 <div className="flex gap-3 mt-2">
-                  <button onClick={() => setShowAddProduct(true)} className="bg-violet-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-violet-700">+ Add Product</button>
-                  <button onClick={() => setTab("data")} className="border border-gray-200 text-gray-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">↑ Import Excel</button>
+                  <button onClick={() => setShowAddProduct(true)} className={`${t.btn} px-4 py-2 rounded-lg text-sm font-medium`}>+ Add Product</button>
+                  <button onClick={() => setTab("data")} className={`${t.btnAlt} px-4 py-2 rounded-lg text-sm font-medium`}>↑ Import Excel</button>
                 </div>
               )}
             </div>
           ) : (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className={`${t.card} rounded-xl overflow-hidden`}>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm border-collapse min-w-max">
                   <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200">
-                      <th className="px-2 py-3 sticky left-0 bg-gray-50 z-10 w-8">
+                    <tr className={`${t.bar} border-b ${t.divider}`}>
+                      <th className={`px-2 py-3 sticky left-0 ${t.bar} z-10 w-8`}>
                         <input type="checkbox"
                           checked={filteredProducts.length > 0 && filteredProducts.every(p => selectedRows.has(p.product_no))}
                           onChange={e => {
@@ -2342,17 +2341,17 @@ export default function BoardPage() {
                           }}
                           className="w-4 h-4 rounded text-violet-600 border-gray-300 focus:ring-violet-500" />
                       </th>
-                      <th className="text-left px-3 py-3 font-semibold text-xs text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10 min-w-[200px]">Product</th>
-                      {taskTypes.map(t => !hiddenCols.has(t) && (
-                        <th key={t} className="px-2 py-3 font-semibold text-xs text-gray-500 uppercase tracking-wider text-center min-w-[100px]">{taskLabels[t] || t}</th>
+                      <th className={`text-left px-3 py-3 font-semibold text-xs ${t.t3} uppercase tracking-wider sticky left-0 ${t.bar} z-10 min-w-[200px]`}>Product</th>
+                      {taskTypes.map(tk => !hiddenCols.has(tk) && (
+                        <th key={tk} className={`px-2 py-3 font-semibold text-xs ${t.t3} uppercase tracking-wider text-center min-w-[100px]`}>{taskLabels[tk] || tk}</th>
                       ))}
-                      {!hiddenCols.has("impressions") && <th onClick={() => handleSort("impressions")} className="cursor-pointer hover:bg-gray-100 px-2 py-3 font-semibold text-xs text-gray-500 uppercase text-right min-w-[80px]" title="Sort by Impressions">Impressions {sortConfig?.key === "impressions" ? (sortConfig.dir === "asc" ? "↑" : "↓") : "⇅"}</th>}
-                      {!hiddenCols.has("ctr") && <th onClick={() => handleSort("ctr")} className="cursor-pointer hover:bg-gray-100 px-2 py-3 font-semibold text-xs text-gray-500 uppercase text-right min-w-[60px]" title="Sort by CTR">CTR {sortConfig?.key === "ctr" ? (sortConfig.dir === "asc" ? "↑" : "↓") : "⇅"}</th>}
-                      {!hiddenCols.has("cvr") && <th onClick={() => handleSort("cvr")} className="cursor-pointer hover:bg-gray-100 px-2 py-3 font-semibold text-xs text-gray-500 uppercase text-right min-w-[60px]" title="Sort by CVR">CVR {sortConfig?.key === "cvr" ? (sortConfig.dir === "asc" ? "↑" : "↓") : "⇅"}</th>}
-                      {!hiddenCols.has("items_sold") && <th onClick={() => handleSort("items_sold")} className="cursor-pointer hover:bg-gray-100 px-2 py-3 font-semibold text-xs text-gray-500 uppercase text-right min-w-[70px]" title="Sort by Items Sold">Items Sold {sortConfig?.key === "items_sold" ? (sortConfig.dir === "asc" ? "↑" : "↓") : "⇅"}</th>}
-                      {!hiddenCols.has("gmv") && <th onClick={() => handleSort("gmv")} className="cursor-pointer hover:bg-gray-100 px-2 py-3 font-semibold text-xs text-gray-500 uppercase text-right min-w-[80px]" title="Sort by GMV">GMV {sortConfig?.key === "gmv" ? (sortConfig.dir === "asc" ? "↑" : "↓") : "⇅"}</th>}
-                      {!hiddenCols.has("roi") && <th onClick={() => handleSort("roi")} className="cursor-pointer hover:bg-gray-100 px-2 py-3 font-semibold text-xs text-gray-500 uppercase text-right min-w-[60px]" title="Sort by ROI">ROI {sortConfig?.key === "roi" ? (sortConfig.dir === "asc" ? "↑" : "↓") : "⇅"}</th>}
-                      <th className="px-2 py-3 font-semibold text-xs text-gray-500 uppercase text-center min-w-[80px]">Actions</th>
+                      {!hiddenCols.has("impressions") && <th onClick={() => handleSort("impressions")} className={`cursor-pointer hover:${t.card2} px-2 py-3 font-semibold text-xs ${t.t3} uppercase text-right min-w-[80px]`} title="Sort by Impressions">Impressions {sortConfig?.key === "impressions" ? (sortConfig.dir === "asc" ? "↑" : "↓") : "⇅"}</th>}
+                      {!hiddenCols.has("ctr") && <th onClick={() => handleSort("ctr")} className={`cursor-pointer hover:${t.card2} px-2 py-3 font-semibold text-xs ${t.t3} uppercase text-right min-w-[60px]`} title="Sort by CTR">CTR {sortConfig?.key === "ctr" ? (sortConfig.dir === "asc" ? "↑" : "↓") : "⇅"}</th>}
+                      {!hiddenCols.has("cvr") && <th onClick={() => handleSort("cvr")} className={`cursor-pointer hover:${t.card2} px-2 py-3 font-semibold text-xs ${t.t3} uppercase text-right min-w-[60px]`} title="Sort by CVR">CVR {sortConfig?.key === "cvr" ? (sortConfig.dir === "asc" ? "↑" : "↓") : "⇅"}</th>}
+                      {!hiddenCols.has("items_sold") && <th onClick={() => handleSort("items_sold")} className={`cursor-pointer hover:${t.card2} px-2 py-3 font-semibold text-xs ${t.t3} uppercase text-right min-w-[70px]`} title="Sort by Items Sold">Items Sold {sortConfig?.key === "items_sold" ? (sortConfig.dir === "asc" ? "↑" : "↓") : "⇅"}</th>}
+                      {!hiddenCols.has("gmv") && <th onClick={() => handleSort("gmv")} className={`cursor-pointer hover:${t.card2} px-2 py-3 font-semibold text-xs ${t.t3} uppercase text-right min-w-[80px]`} title="Sort by GMV">GMV {sortConfig?.key === "gmv" ? (sortConfig.dir === "asc" ? "↑" : "↓") : "⇅"}</th>}
+                      {!hiddenCols.has("roi") && <th onClick={() => handleSort("roi")} className={`cursor-pointer hover:${t.card2} px-2 py-3 font-semibold text-xs ${t.t3} uppercase text-right min-w-[60px]`} title="Sort by ROI">ROI {sortConfig?.key === "roi" ? (sortConfig.dir === "asc" ? "↑" : "↓") : "⇅"}</th>}
+                      <th className={`px-2 py-3 font-semibold text-xs ${t.t3} uppercase text-center min-w-[80px]`}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2461,6 +2460,6 @@ export default function BoardPage() {
         <MetricsModal product={metricsProduct} periodId={selectedPeriodId!} storeCode={storeCode}
           onClose={() => setMetricsProduct(null)} onSaved={loadBoard} />
       )}
-    </div>
+    </>
   );
 }

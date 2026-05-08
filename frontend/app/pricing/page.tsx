@@ -47,9 +47,9 @@ function ProductCard({ product, storeFilter, mode, t }: {
     <div className={`${t.card} rounded-xl overflow-hidden hover:shadow-md transition-shadow`}>
       <div className={`flex items-center gap-3 p-3 border-b ${t.divider}`}>
         {product.image_url ? (
-          <img src={product.image_url} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" style={{ background: t.bar === "bg-slate-800" ? "#1e293b" : "#f1f5f9" }} />
+          <img src={product.image_url} alt="" className={`w-12 h-12 rounded-lg object-cover shrink-0 ${t.bar.split(" ")[0]}`} />
         ) : (
-          <div className={`w-12 h-12 rounded-lg shrink-0 flex items-center justify-center text-xl ${t.t5}`} style={{ background: t.bar === "bg-slate-800" ? "#1e293b" : "#f1f5f9" }}>□</div>
+          <div className={`w-12 h-12 rounded-lg shrink-0 flex items-center justify-center text-xl ${t.t5} ${t.bar.split(" ")[0]}`}>□</div>
         )}
         <div className="flex-1 min-w-0">
           <div className={`text-sm font-bold ${t.t1} leading-tight`}>#{product.product_no}</div>

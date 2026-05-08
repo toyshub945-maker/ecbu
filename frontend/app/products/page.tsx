@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -48,12 +48,12 @@ function CustomTooltip({ active, payload, label, prefix = "" }: any) {
           <span className={`font-bold ml-auto pl-4 ${isDark ? "text-white" : "text-gray-900"}`}>{prefix}{fmt(p.value)}</span>
         </div>
       ))}
-    </div>
-  );
+    </div>  );
 }
 
 // ─── Upload Panel ─────────────────────────────────────────────────────────────
 function UploadPanel({ onClose, onUploaded, t }: { onClose: () => void; onUploaded: () => void; t: ThemeDef }) {
+  const { themeKey } = useTheme();
   const [store, setStore]   = useState<string>("TK1");
   const [file, setFile]     = useState<File | null>(null);
   const [busy, setBusy]     = useState(false);
@@ -86,12 +86,12 @@ function UploadPanel({ onClose, onUploaded, t }: { onClose: () => void; onUpload
     <div className="fixed inset-0 z-50 flex">
       <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className={`w-[460px] ${t.card} h-full flex flex-col shadow-2xl border-l ${t.divider}`}>
-        <div className={`px-5 py-4 border-b ${t.divider} flex items-center justify-between shrink-0 ${t.page === "bg-slate-950" ? "bg-slate-900" : "bg-gray-50"}`}>
+        <div className={`px-5 py-4 border-b ${t.divider} flex items-center justify-between shrink-0 ${themeKey !== "light" ? "bg-slate-900" : "bg-gray-50"}`}>
           <div>
             <h2 className={`font-bold ${t.t1} text-sm`}>Upload Analytics Data</h2>
             <p className={`text-xs ${t.t4} mt-0.5`}>TikTok export · orders + traffic</p>
           </div>
-          <button onClick={onClose} className={`${t.t4} hover:${t.t2} p-1.5 rounded-lg ${t.page === "bg-slate-950" ? "hover:bg-slate-800" : "hover:bg-gray-100"} transition-colors`}>
+          <button onClick={onClose} className={`${t.t4} hover:${t.t2} p-1.5 rounded-lg ${themeKey !== "light" ? "hover:bg-slate-800" : "hover:bg-gray-100"} transition-colors`}>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
         </div>
@@ -105,7 +105,7 @@ function UploadPanel({ onClose, onUploaded, t }: { onClose: () => void; onUpload
                   className={`py-2.5 rounded-xl text-xs font-bold transition-all flex flex-col items-center gap-1.5 border ${
                     store === s
                       ? "bg-violet-600 text-white border-violet-600 shadow-sm"
-                      : `${t.card} ${t.t3} border ${t.page === "bg-slate-950" ? "border-slate-700 hover:border-violet-500" : "border-gray-200 hover:border-violet-300"} hover:text-violet-500`
+                      : `${t.card} ${t.t3} border ${themeKey !== "light" ? "border-slate-700 hover:border-violet-500" : "border-gray-200 hover:border-violet-300"} hover:text-violet-500`
                   }`}>
                   <span className="w-1.5 h-1.5 rounded-full" style={{background: STORE_HEX[s]}} />
                   {s}
@@ -119,7 +119,7 @@ function UploadPanel({ onClose, onUploaded, t }: { onClose: () => void; onUpload
               { icon:"📦", label:"Orders", items:["GMV","Orders count","Items sold","AOV","Refunds"] },
               { icon:"📡", label:"Traffic", items:["Impressions","Clicks","CTR","Add-to-cart","CVR"] },
             ].map(cat => (
-              <div key={cat.label} className={`${t.page === "bg-slate-950" ? "bg-slate-800 border-slate-700" : "bg-gray-50 border-gray-200"} rounded-xl p-3 border`}>
+              <div key={cat.label} className={`${themeKey !== "light" ? "bg-slate-800 border-slate-700" : "bg-gray-50 border-gray-200"} rounded-xl p-3 border`}>
                 <div className="flex items-center gap-2 mb-2">
                   <span>{cat.icon}</span>
                   <span className={`text-xs font-semibold ${t.t2}`}>{cat.label}</span>
@@ -134,14 +134,14 @@ function UploadPanel({ onClose, onUploaded, t }: { onClose: () => void; onUpload
             ))}
           </div>
 
-          <div className={`text-[11px] ${t.page === "bg-slate-950" ? "text-violet-400 bg-violet-950 border-violet-800" : "text-violet-700 bg-violet-50 border-violet-200"} border rounded-xl px-3 py-2.5`}>
+          <div className={`text-[11px] ${themeKey !== "light" ? "text-violet-400 bg-violet-950 border-violet-800" : "text-violet-700 bg-violet-50 border-violet-200"} border rounded-xl px-3 py-2.5`}>
             💡 Download from <span className="font-medium">TikTok Seller Center → Analytics → Product Performance</span>
           </div>
 
           <label className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-2xl p-6 cursor-pointer transition-all ${
             file
               ? "border-violet-400 bg-violet-50"
-              : `${t.page === "bg-slate-950" ? "border-slate-700 hover:border-violet-500 hover:bg-slate-800" : "border-gray-200 hover:border-violet-300 hover:bg-gray-50"}`
+              : `${themeKey !== "light" ? "border-slate-700 hover:border-violet-500 hover:bg-slate-800" : "border-gray-200 hover:border-violet-300 hover:bg-gray-50"}`
           }`}>
             <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden"
               onChange={e => { setFile(e.target.files?.[0] || null); setMsg(null); }} />
@@ -149,11 +149,11 @@ function UploadPanel({ onClose, onUploaded, t }: { onClose: () => void; onUpload
               <>
                 <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center text-xl">📄</div>
                 <span className="text-sm font-semibold text-violet-700">{file.name}</span>
-                <span className="text-xs text-gray-400">{(file.size/1024).toFixed(0)} KB</span>
+                <span className={`text-xs ${t.t4}`}>{(file.size/1024).toFixed(0)} KB</span>
               </>
             ) : (
               <>
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl ${t.page === "bg-slate-950" ? "bg-slate-800" : "bg-gray-100"}`}>📁</div>
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl ${t.bar.split(" ")[0]}`}>📁</div>
                 <span className={`text-sm ${t.t3}`}>Click to select .xlsx file</span>
                 <span className={`text-xs ${t.t4}`}>TikTok Product Performance Export</span>
               </>
@@ -167,21 +167,21 @@ function UploadPanel({ onClose, onUploaded, t }: { onClose: () => void; onUpload
           )}
 
           <button onClick={handleUpload} disabled={!file || busy}
-            className="w-full py-3 bg-violet-600 hover:bg-violet-700 disabled:bg-gray-100 disabled:text-gray-400 text-white text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm">
+            className={`w-full py-3 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm`}>
             {busy ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Importing…</> : <>📤 Import to {store}</>}
           </button>
 
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className={`text-[11px] font-semibold ${t.t4} uppercase tracking-wider`}>History · {store}</span>
-              {loadHist && <div className={`w-3 h-3 border ${t.page === "bg-slate-950" ? "border-slate-600 border-t-slate-300" : "border-gray-300 border-t-gray-500"} rounded-full animate-spin`} />}
+              {loadHist && <div className={`w-3 h-3 border ${themeKey !== "light" ? "border-slate-600 border-t-slate-300" : "border-gray-300 border-t-gray-500"} rounded-full animate-spin`} />}
             </div>
             {history.length === 0 ? (
-              <div className={`text-xs ${t.t4} text-center py-4 ${t.page === "bg-slate-950" ? "bg-slate-800 border-slate-700" : "bg-gray-50 border-gray-200"} rounded-xl border`}>No uploads yet</div>
+              <div className={`text-xs ${t.t4} text-center py-4 ${themeKey !== "light" ? "bg-slate-800 border-slate-700" : "bg-gray-50 border-gray-200"} rounded-xl border`}>No uploads yet</div>
             ) : (
               <div className="space-y-1.5">
                 {history.map((h, i) => (
-                  <div key={i} className={`flex items-center justify-between ${t.page === "bg-slate-950" ? "bg-slate-800 border-slate-700" : "bg-gray-50 border-gray-200"} rounded-xl px-3 py-2.5 border`}>
+                  <div key={i} className={`flex items-center justify-between ${themeKey !== "light" ? "bg-slate-800 border-slate-700" : "bg-gray-50 border-gray-200"} rounded-xl px-3 py-2.5 border`}>
                     <div>
                       <div className={`text-xs font-semibold ${t.t2}`}>{h.period_start} → {h.period_end}</div>
                       <div className={`text-[10px] ${t.t4} mt-0.5`}>{h.product_count} products · ${h.total_gmv?.toFixed(0) ?? "—"} GMV</div>
@@ -196,12 +196,12 @@ function UploadPanel({ onClose, onUploaded, t }: { onClose: () => void; onUpload
           </div>
         </div>
       </div>
-    </div>
-  );
+    </div>  );
 }
 
 // ─── Chart Section ────────────────────────────────────────────────────────────
 function ChartSection({ monthly, t }: { monthly: PMDetail["monthly"]; t: ThemeDef }) {
+  const { themeKey } = useTheme();
   const [tab, setTab] = useState<"orders" | "gmv" | "traffic">("orders");
 
   if (!monthly.length) {
@@ -232,8 +232,8 @@ function ChartSection({ monthly, t }: { monthly: PMDetail["monthly"]; t: ThemeDe
 
   const activeTab = TABS.find(x => x.key === tab)!;
   const useBars = data.length < 3;
-  const gridColor = t.page === "bg-slate-950" ? "#334155" : "#e5e7eb";
-  const tickFill = t.page === "bg-slate-950" ? "#64748b" : "#9ca3af";
+  const gridColor = themeKey !== "light" ? "#334155" : "#e5e7eb";
+  const tickFill = themeKey !== "light" ? "#64748b" : "#9ca3af";
 
   return (
     <div>
@@ -244,7 +244,7 @@ function ChartSection({ monthly, t }: { monthly: PMDetail["monthly"]; t: ThemeDe
           { label:"Total Impr.",  value: monthly.reduce((s,m)=>s+m.impressions,0),  fmt:(v:number)=>fmt(v),              color:"text-blue-700", bg:"bg-blue-50 border-blue-200" },
         ].map(k => (
           <div key={k.label} className={`rounded-2xl p-3 border ${k.bg}`}>
-            <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 font-semibold">{k.label}</div>
+            <div className={`text-[10px] ${t.t4} uppercase tracking-wider mb-1 font-semibold`}>{k.label}</div>
             <div className={`text-lg font-bold ${k.color}`}>{k.fmt(k.value)}</div>
           </div>
         ))}
@@ -263,7 +263,7 @@ function ChartSection({ monthly, t }: { monthly: PMDetail["monthly"]; t: ThemeDe
         ))}
       </div>
 
-      <div className={`${t.page === "bg-slate-950" ? "bg-slate-800 border-slate-700" : "bg-gray-50 border-gray-200"} rounded-2xl p-4 border`}>
+      <div className={`${themeKey !== "light" ? "bg-slate-800 border-slate-700" : "bg-gray-50 border-gray-200"} rounded-2xl p-4 border`}>
         <ResponsiveContainer width="100%" height={200}>
           {tab === "traffic" ? (
             useBars ? (
@@ -326,12 +326,12 @@ function ChartSection({ monthly, t }: { monthly: PMDetail["monthly"]; t: ThemeDe
           )}
         </ResponsiveContainer>
       </div>
-    </div>
-  );
+    </div>  );
 }
 
 // ─── Stock Section ────────────────────────────────────────────────────────────
 function StockSection({ stock, t }: { stock: PMDetail["stock"]; t: ThemeDef }) {
+  const { themeKey } = useTheme();
   if (!stock.total && !stock.groups.length) {
     return (
       <div className="flex flex-col items-center justify-center h-40 gap-3">
@@ -363,7 +363,7 @@ function StockSection({ stock, t }: { stock: PMDetail["stock"]; t: ThemeDef }) {
 
       {stock.groups.map(g => (
         <div key={g.sheet_name} className={`${t.card} rounded-2xl border ${t.divider} overflow-hidden shadow-sm`}>
-          <div className={`flex items-center justify-between px-4 py-2.5 border-b ${t.divider} ${t.page === "bg-slate-950" ? "bg-slate-800" : "bg-gray-50"}`}>
+          <div className={`flex items-center justify-between px-4 py-2.5 border-b ${t.divider} ${themeKey !== "light" ? "bg-slate-800" : "bg-gray-50"}`}>
             <span className={`text-xs font-bold ${t.t2}`}>{g.sheet_name}</span>
             <span className={`text-xs ${t.t4} font-medium`}>{g.total} units</span>
           </div>
@@ -389,12 +389,12 @@ function StockSection({ stock, t }: { stock: PMDetail["stock"]; t: ThemeDef }) {
           </div>
         </div>
       ))}
-    </div>
-  );
+    </div>  );
 }
 
 // ─── Pricing Section ──────────────────────────────────────────────────────────
 function PricingSection({ pricing, cost, t }: { pricing: PMDetail["pricing"]; cost: number | null; t: ThemeDef }) {
+  const { themeKey } = useTheme();
   const stores = Object.keys(pricing);
   if (!stores.length) {
     return (
@@ -407,11 +407,11 @@ function PricingSection({ pricing, cost, t }: { pricing: PMDetail["pricing"]; co
   return (
     <div className="space-y-4">
       {cost != null && (
-        <div className={`${t.page === "bg-slate-950" ? "bg-amber-950 border-amber-800" : "bg-amber-50 border-amber-200"} rounded-2xl px-4 py-3 border flex items-center gap-4`}>
-          <div className={`text-xs font-semibold ${t.page === "bg-slate-950" ? "text-amber-400" : "text-amber-700"}`}>Cost</div>
-          <div className={`font-bold ${t.page === "bg-slate-950" ? "text-amber-300" : "text-amber-900"}`}>¥{cost}</div>
-          <div className={t.page === "bg-slate-950" ? "text-amber-700" : "text-amber-300"}>·</div>
-          <div className={`text-xs ${t.page === "bg-slate-950" ? "text-amber-400" : "text-amber-700"}`}>≈ <span className="font-bold">${(cost/7+11).toFixed(2)}</span> USD landed</div>
+        <div className={`${themeKey !== "light" ? "bg-amber-950 border-amber-800" : "bg-amber-50 border-amber-200"} rounded-2xl px-4 py-3 border flex items-center gap-4`}>
+          <div className={`text-xs font-semibold ${themeKey !== "light" ? "text-amber-400" : "text-amber-700"}`}>Cost</div>
+          <div className={`font-bold ${themeKey !== "light" ? "text-amber-300" : "text-amber-900"}`}>¥{cost}</div>
+          <div className={themeKey !== "light" ? "text-amber-700" : "text-amber-300"}>·</div>
+          <div className={`text-xs ${themeKey !== "light" ? "text-amber-400" : "text-amber-700"}`}>≈ <span className="font-bold">${(cost/7+11).toFixed(2)}</span> USD landed</div>
         </div>
       )}
       <div className="grid grid-cols-2 gap-3">
@@ -452,12 +452,12 @@ function PricingSection({ pricing, cost, t }: { pricing: PMDetail["pricing"]; co
           );
         })}
       </div>
-    </div>
-  );
+    </div>  );
 }
 
 // ─── R&R Section ─────────────────────────────────────────────────────────────
 function RRSection({ rr, t }: { rr: PMDetail["rr"]; t: ThemeDef }) {
+  const { themeKey } = useTheme();
   const stores = Object.keys(rr.by_store);
   if (!stores.length && rr.overall == null) {
     return (
@@ -478,21 +478,21 @@ function RRSection({ rr, t }: { rr: PMDetail["rr"]; t: ThemeDef }) {
       {rr.overall != null && (
         <div className={`rounded-2xl px-5 py-4 border shadow-sm ${rrBadge(rr.overall)} flex items-center justify-between`}>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/60 flex items-center justify-center text-xl">↩️</div>
+            <div className={`w-10 h-10 rounded-xl ${t.card2} flex items-center justify-center text-xl`}>↩️</div>
             <div>
-              <div className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">Overall R&R Rate</div>
+              <div className={`text-[10px] ${t.t4} uppercase tracking-wider font-semibold`}>Overall R&R Rate</div>
               <div className={`text-3xl font-black ${rrClr(rr.overall)}`}>{rr.overall}%</div>
             </div>
           </div>
           <div className="text-right">
             <div className={`text-sm font-bold ${rrClr(rr.overall)}`}>{rrLabel(rr.overall)}</div>
-            <div className="text-[10px] text-gray-400 mt-0.5">Target: ≤5%</div>
+            <div className={`text-[10px] ${t.t5} mt-0.5`}>Target: ≤5%</div>
           </div>
         </div>
       )}
       {stores.length > 0 && (
         <div className={`${t.card} rounded-2xl border ${t.divider} overflow-hidden shadow-sm`}>
-          <div className={`px-4 py-2.5 border-b ${t.divider} ${t.page === "bg-slate-950" ? "bg-slate-800" : "bg-gray-50"}`}>
+          <div className={`px-4 py-2.5 border-b ${t.divider} ${themeKey !== "light" ? "bg-slate-800" : "bg-gray-50"}`}>
             <span className={`text-[10px] font-bold ${t.t4} uppercase tracking-wider`}>By Store</span>
           </div>
           {stores.map(sc => {
@@ -520,12 +520,12 @@ function RRSection({ rr, t }: { rr: PMDetail["rr"]; t: ThemeDef }) {
           })}
         </div>
       )}
-    </div>
-  );
+    </div>  );
 }
 
 // ─── Detail Panel ─────────────────────────────────────────────────────────────
 function DetailPanel({ productNo, onClose, t }: { productNo: string; onClose: () => void; t: ThemeDef }) {
+  const { themeKey } = useTheme();
   const [detail, setDetail] = useState<PMDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"overview"|"stock"|"pricing"|"rr">("overview");
@@ -546,7 +546,7 @@ function DetailPanel({ productNo, onClose, t }: { productNo: string; onClose: ()
 
   return (
     <div className={`flex flex-col h-full ${t.card}`}>
-      <div className={`relative overflow-hidden shrink-0 bg-gradient-to-b ${perf ? perf.headerBg : t.page === "bg-slate-950" ? "from-slate-900 via-slate-950 to-slate-950" : "from-gray-50 via-white to-white"}`}>
+      <div className={`relative overflow-hidden shrink-0 bg-gradient-to-b ${perf ? perf.headerBg : themeKey !== "light" ? "from-slate-900 via-slate-950 to-slate-950" : "from-gray-50 via-white to-white"}`}>
         <div className={`flex items-center gap-4 px-6 py-5 border-b ${t.divider}`}>
           {detail?.product.image_url ? (
             <img src={detail.product.image_url} alt="" className="w-16 h-16 rounded-2xl object-cover shadow-md ring-2 ring-white shrink-0" />
@@ -569,7 +569,7 @@ function DetailPanel({ productNo, onClose, t }: { productNo: string; onClose: ()
               <div className={`text-[10px] ${t.t4} mt-1 uppercase tracking-wider font-medium`}>{detail.product.status}</div>
             )}
           </div>
-          <button onClick={onClose} className={`${t.t4} hover:${t.t2} p-2 rounded-xl ${t.page === "bg-slate-950" ? "hover:bg-slate-800" : "hover:bg-gray-100"} transition-colors shrink-0`}>
+          <button onClick={onClose} className={`${t.t4} hover:${t.t2} p-2 rounded-xl ${themeKey !== "light" ? "hover:bg-slate-800" : "hover:bg-gray-100"} transition-colors shrink-0`}>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
         </div>
@@ -584,7 +584,7 @@ function DetailPanel({ productNo, onClose, t }: { productNo: string; onClose: ()
         </div>
       ) : detail ? (
         <>
-          <div className={`grid grid-cols-4 gap-2 px-5 py-3 shrink-0 border-b ${t.divider} ${t.page === "bg-slate-950" ? "bg-slate-900/50" : "bg-gray-50/50"}`}>
+          <div className={`grid grid-cols-4 gap-2 px-5 py-3 shrink-0 border-b ${t.divider} ${themeKey !== "light" ? "bg-slate-900/50" : "bg-gray-50/50"}`}>
             {[
               { label:"Orders",     value: fmt(detail.latest_orders),
                 sub: detail.monthly.at(-1)?.period_start?.slice(0,7),
@@ -632,18 +632,18 @@ function DetailPanel({ productNo, onClose, t }: { productNo: string; onClose: ()
       ) : (
         <div className={`flex-1 flex items-center justify-center ${t.t4} text-sm`}>Failed to load</div>
       )}
-    </div>
-  );
+    </div>  );
 }
 
 // ─── Product List Item ────────────────────────────────────────────────────────
 function ProductItem({ p, active, onClick, t }: { p: PMProduct; active: boolean; onClick: () => void; t: ThemeDef }) {
+  const { themeKey } = useTheme();
   const perf = PERF[p.performance];
   return (
     <button onClick={onClick}
       className={`w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group border ${
         active
-          ? `${t.page === "bg-slate-950" ? "bg-violet-950 border-violet-800" : "bg-violet-50 border-violet-200"} shadow-sm`
+          ? `${themeKey !== "light" ? "bg-violet-950 border-violet-800" : "bg-violet-50 border-violet-200"} shadow-sm`
           : `hover:${t.bar} border-transparent hover:${t.divider}`
       }`}>
       <div className={`w-0.5 self-stretch rounded-full ${perf.bar} shrink-0 ${active?"opacity-100":"opacity-30 group-hover:opacity-60"}`} />
@@ -680,7 +680,7 @@ const PERF_FILTERS: {key:PerfTier|"all"; label:string}[] = [
 ];
 
 export default function ProductManagerPage() {
-  const { theme: t } = useTheme();
+  const { theme: t, themeKey } = useTheme();
   const [products, setProducts]     = useState<PMProduct[]>([]);
   const [loading, setLoading]       = useState(true);
   const [q, setQ]                   = useState("");
@@ -707,21 +707,21 @@ export default function ProductManagerPage() {
   const filtered = perfFilter==="all" ? products : products.filter(p=>p.performance===perfFilter);
 
   return (
-    <div className={`flex min-h-screen ${t.page}`}>
+    <>
       <Sidebar />
 
       {showUpload && (
         <UploadPanel onClose={()=>setShowUpload(false)} onUploaded={()=>{load();setShowUpload(false);}} t={t} />
       )}
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className={`flex-1 flex flex-col min-w-0 ${t.page}`}>
         <div className={`px-6 py-3.5 border-b ${t.divider} ${t.card} shrink-0 flex items-center justify-between gap-4`}>
           <div>
             <h1 className={`text-base font-black ${t.t1} tracking-tight`}>🗂️ Product Manager</h1>
             <p className={`text-[11px] ${t.t4} mt-0.5`}>Orders · Traffic · Stock · Pricing · R&R</p>
           </div>
           <div className="flex items-center gap-3">
-            <div className={`flex items-center gap-2 ${t.page === "bg-slate-950" ? "bg-slate-800 border-slate-700" : "bg-gray-50 border-gray-200"} rounded-xl px-3 py-1.5 border`}>
+            <div className={`flex items-center gap-2 ${themeKey !== "light" ? "bg-slate-800 border-slate-700" : "bg-gray-50 border-gray-200"} rounded-xl px-3 py-1.5 border`}>
               <span className={`text-[10px] ${t.t4}`}>{products.length} products</span>
               <span className={t.t4}>·</span>
               {[
@@ -770,7 +770,7 @@ export default function ProductManagerPage() {
               </div>
             </div>
 
-            <div className={`px-4 py-1.5 shrink-0 ${t.page === "bg-slate-950" ? "bg-slate-900" : "bg-gray-50"} border-b ${t.divider}`}>
+            <div className={`px-4 py-1.5 shrink-0 ${themeKey !== "light" ? "bg-slate-900" : "bg-gray-50"} border-b ${t.divider}`}>
               <span className={`text-[9px] ${t.t4} uppercase tracking-wider font-semibold`}>{filtered.length} / {products.length} products</span>
             </div>
 
@@ -797,7 +797,7 @@ export default function ProductManagerPage() {
                 <DetailPanel productNo={selectedNo} onClose={()=>setSelected(null)} t={t} />
               </div>
             ) : (
-              <div className={`flex flex-col items-center justify-center h-full gap-5 text-center px-8 ${t.page === "bg-slate-950" ? "bg-slate-900/50" : "bg-gray-50"}`}>
+              <div className={`flex flex-col items-center justify-center h-full gap-5 text-center px-8 ${themeKey !== "light" ? "bg-slate-900/50" : "bg-gray-50"}`}>
                 <div className={`w-20 h-20 rounded-3xl ${t.card} flex items-center justify-center text-4xl ring-1 ${t.divider} shadow-sm`}>🗂️</div>
                 <div>
                   <p className={`text-lg font-bold ${t.t2}`}>Select a product</p>
@@ -822,6 +822,6 @@ export default function ProductManagerPage() {
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

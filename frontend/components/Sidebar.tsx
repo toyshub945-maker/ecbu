@@ -49,14 +49,14 @@ export default function Sidebar() {
 
       {/* Logo */}
       <div className={`px-4 py-5 border-b ${t.divider}`}>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           <div className={`w-7 h-7 rounded-lg ${t.accentBg} flex items-center justify-center shrink-0`}>
             <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2" />
             </svg>
           </div>
-          <span className="font-bold text-sm tracking-tight">WorkFlow</span>
+          <span className={`font-bold text-sm tracking-tight ${t.t1}`}>WorkFlow</span>
         </div>
       </div>
 
@@ -67,7 +67,7 @@ export default function Sidebar() {
         </NavItem>
 
         <div className="pt-3 pb-1 px-2">
-          <span className={`text-xs font-semibold ${t.t4} uppercase tracking-wider`}>Stores</span>
+          <span className={`text-[10px] font-bold ${t.t5} uppercase tracking-widest`}>Stores</span>
         </div>
 
         {STORES.map(s => {
@@ -77,60 +77,59 @@ export default function Sidebar() {
               key={s.code}
               href={`/board/${s.code}`}
               className={`flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm transition-colors ${
-                active ? `${t.bar} ${t.t1}` : `${t.t3} hover:${t.bar} hover:${t.t1}`
+                active ? `${t.bar} ${t.t1} font-medium` : `${t.t3} hover:${t.bar} hover:${t.t2}`
               }`}
             >
               <span className={`w-2 h-2 rounded-full ${STORE_COLORS[s.code]} shrink-0`} />
               <span className="truncate">{s.name}</span>
-              <span className={`ml-auto text-xs ${t.t5}`}>{s.code}</span>
+              <span className={`ml-auto text-[10px] ${t.t5}`}>{s.code}</span>
             </Link>
           );
         })}
 
         <div className="pt-3 pb-1 px-2">
-          <span className={`text-xs font-semibold ${t.t4} uppercase tracking-wider`}>Manage</span>
+          <span className={`text-[10px] font-bold ${t.t5} uppercase tracking-widest`}>Manage</span>
         </div>
 
         <NavItem href="/products" active={pathname.startsWith("/products")} icon="🗂️" t={t}>
           Product Manager
         </NavItem>
-
         <NavItem href="/weeks" active={pathname === "/weeks"} icon="📅" t={t}>
           Week Setup
         </NavItem>
-
         <NavItem href="/rr" active={pathname === "/rr"} icon="↩️" t={t}>
           R&amp;R Rate
         </NavItem>
-
         <NavItem href="/pricing" active={pathname === "/pricing"} icon="💰" t={t}>
           Pricing
         </NavItem>
-
         <NavItem href="/inventory" active={pathname.startsWith("/inventory")} icon="📦" t={t}>
           Inventory
         </NavItem>
-
         <NavItem href="/ads" active={pathname.startsWith("/ads")} icon="📈" t={t}>
           Ads Management
         </NavItem>
-
         <NavItem href="/settings" active={pathname === "/settings"} icon="⚙️" t={t}>
           Settings
         </NavItem>
       </nav>
 
       {/* Theme selector */}
-      <div className={`px-3 py-2 border-t ${t.divider}`}>
+      <div className={`px-3 py-2.5 border-t ${t.divider}`}>
         <button
           onClick={() => setShowThemePicker(true)}
-          className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm w-full transition-colors ${t.btnAlt}`}
+          className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm w-full transition-all ${t.btnAlt} hover:scale-[1.01]`}
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/>
+          {/* Live color dots showing current theme */}
+          <div className="flex gap-1 shrink-0">
+            {THEMES[themeKey].preview.slice(0,3).map((c, i) => (
+              <div key={i} className="w-2.5 h-2.5 rounded-full border border-white/10" style={{ background: c }} />
+            ))}
+          </div>
+          <span className={`flex-1 text-left text-xs font-medium ${t.t2} truncate`}>{THEMES[themeKey].name}</span>
+          <svg className={`w-3.5 h-3.5 ${t.t4} shrink-0`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
           </svg>
-          <span className="truncate">{t.name}</span>
         </button>
       </div>
 
@@ -138,16 +137,16 @@ export default function Sidebar() {
       {user && (
         <div className={`p-3 border-t ${t.divider}`}>
           <div className="flex items-center gap-2 px-2 py-1.5">
-            <div className={`w-7 h-7 rounded-full ${t.accentBg} flex items-center justify-center text-xs font-bold shrink-0`}>
+            <div className={`w-7 h-7 rounded-full ${t.accentBg} flex items-center justify-center text-xs font-bold shrink-0 text-white`}>
               {user.name.charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <div className={`text-xs font-medium ${t.t1} truncate`}>{user.name}</div>
-              <div className={`text-xs ${t.t4} capitalize`}>{user.role}</div>
+              <div className={`text-xs font-semibold ${t.t1} truncate`}>{user.name}</div>
+              <div className={`text-[10px] ${t.t4} capitalize`}>{user.role}</div>
             </div>
             <button
               onClick={logout}
-              className={`${t.t4} hover:${t.t1} text-xs p-1 rounded`}
+              className={`${t.t4} hover:${t.t1} text-sm p-1.5 rounded-lg hover:${t.bar} transition-colors`}
               title="Sign out"
             >
               ↩
@@ -166,74 +165,167 @@ function NavItem({ href, active, icon, children, t }: {
     <Link
       href={href}
       className={`flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm transition-colors ${
-        active ? `${t.bar} ${t.t1}` : `${t.t3} hover:${t.bar} hover:${t.t1}`
+        active ? `${t.bar} ${t.t1} font-medium` : `${t.t3} hover:${t.bar} hover:${t.t2}`
       }`}
     >
-      <span className="text-base">{icon}</span>
+      <span className="text-base leading-none">{icon}</span>
       <span>{children}</span>
     </Link>
   );
 }
 
+// ─── Theme Picker Modal ───────────────────────────────────────────────────────
 function ThemePickerModal({ current, onSelect, onClose }: {
   current: ThemeKey; onSelect: (k: ThemeKey) => void; onClose: () => void;
 }) {
-  const OPTS: ThemeKey[] = ["classic", "light", "dark"];
+  const OPTS: { key: ThemeKey; emoji: string }[] = [
+    { key: "classic", emoji: "🌙" },
+    { key: "light",   emoji: "☀️" },
+    { key: "dark",    emoji: "🖤" },
+  ];
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-6 w-full max-w-lg shadow-2xl">
-        <div className="flex items-center justify-between mb-5">
+    <div
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.75)", backdropFilter: "blur(6px)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="w-full max-w-xl rounded-3xl overflow-hidden shadow-2xl"
+        style={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.08)" }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-5" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
           <div>
-            <h2 className="text-white font-black text-lg">Choose Theme</h2>
-            <p className="text-zinc-400 text-xs mt-0.5">Pick a look for the entire app</p>
+            <h2 className="text-white font-bold text-base tracking-tight">Appearance</h2>
+            <p className="text-slate-400 text-xs mt-0.5">Choose a theme for the entire app</p>
           </div>
-          <button onClick={onClose} className="text-zinc-500 hover:text-white p-1.5 rounded-xl hover:bg-zinc-800 transition-colors">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-500 hover:text-white transition-colors"
+            style={{ background: "rgba(255,255,255,0.05)" }}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+            </svg>
           </button>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
-          {OPTS.map(k => {
+        {/* Theme cards */}
+        <div className="p-6 grid grid-cols-3 gap-4">
+          {OPTS.map(({ key: k, emoji }) => {
             const th = THEMES[k];
             const active = current === k;
+            const isLight = k === "light";
+
             return (
-              <button key={k} onClick={() => { onSelect(k); onClose(); }}
-                className={`relative rounded-2xl overflow-hidden border-2 transition-all ${
-                  active ? "border-purple-500 shadow-lg shadow-purple-500/20" : "border-zinc-700 hover:border-zinc-500"
-                }`}>
-                <div className="h-28 relative" style={{ background: th.preview[0] }}>
-                  <div className="absolute top-3 left-3 right-3 rounded-lg p-2" style={{ background: th.preview[1], border: `1px solid ${th.preview[0] === "#f8fafc" ? "#e2e8f0" : "#333"}` }}>
-                    <div className="h-1.5 rounded w-12 mb-1.5" style={{ background: th.preview[2] }}/>
-                    <div className="h-1 rounded w-8" style={{ background: th.preview[3], opacity: 0.8 }}/>
-                    <div className="flex gap-1 mt-2">
-                      <div className="h-5 rounded flex-1" style={{ background: th.preview[2], opacity: 0.15 }}/>
-                      <div className="h-5 rounded flex-1" style={{ background: th.preview[3], opacity: 0.15 }}/>
+              <button
+                key={k}
+                onClick={() => onSelect(k)}
+                className="group relative flex flex-col rounded-2xl overflow-hidden transition-all duration-200"
+                style={{
+                  border: active
+                    ? `2px solid ${th.preview[2]}`
+                    : "2px solid rgba(255,255,255,0.08)",
+                  boxShadow: active ? `0 0 20px ${th.preview[2]}33` : "none",
+                  transform: active ? "scale(1.02)" : undefined,
+                }}
+              >
+                {/* Preview area */}
+                <div className="h-36 relative overflow-hidden" style={{ background: th.preview[0] }}>
+
+                  {/* Fake sidebar strip */}
+                  <div className="absolute top-0 left-0 bottom-0 w-8"
+                    style={{ background: th.preview[1], borderRight: `1px solid ${isLight ? "#e2e8f0" : "rgba(255,255,255,0.06)"}` }}>
+                    <div className="mt-2.5 mx-1 space-y-1">
+                      {[1,0.4,0.4,0.4].map((op, i) => (
+                        <div key={i} className="h-1.5 rounded-full mx-0.5" style={{ background: th.preview[2], opacity: op }} />
+                      ))}
                     </div>
                   </div>
-                  <div className="absolute bottom-3 left-3 right-3 h-1.5 rounded-full" style={{ background: th.preview[2] }}/>
-                </div>
-                <div className="px-3 py-2.5" style={{ background: th.preview[1], borderTop: `1px solid ${th.preview[0] === "#f8fafc" ? "#e2e8f0" : "#222"}` }}>
-                  <div className="font-bold text-xs" style={{ color: th.preview[0] === "#f8fafc" ? "#111" : "#fff" }}>
-                    {k === "classic" ? "1" : k === "light" ? "2" : "3"}. {th.name}
+
+                  {/* Main content area */}
+                  <div className="absolute top-0 left-8 right-0 bottom-0 p-2">
+                    {/* Topbar */}
+                    <div className="h-4 rounded mb-1.5 flex items-center px-1.5 gap-1"
+                      style={{ background: th.preview[1], border: `1px solid ${isLight ? "#e2e8f0" : "rgba(255,255,255,0.06)"}` }}>
+                      <div className="h-1 rounded flex-1" style={{ background: isLight ? "#94a3b8" : "rgba(255,255,255,0.2)" }}/>
+                      <div className="h-2 w-4 rounded" style={{ background: th.preview[2], opacity: 0.8 }}/>
+                    </div>
+
+                    {/* Cards row */}
+                    <div className="flex gap-1 mb-1">
+                      {[0.9, 0.6, 0.4].map((op, i) => (
+                        <div key={i} className="flex-1 h-7 rounded-lg p-1"
+                          style={{ background: th.preview[1], border: `1px solid ${isLight ? "#e2e8f0" : "rgba(255,255,255,0.06)"}` }}>
+                          <div className="h-1 rounded w-3/4 mb-0.5" style={{ background: th.preview[2], opacity: op }}/>
+                          <div className="h-1 rounded w-1/2" style={{ background: th.preview[3], opacity: 0.6 }}/>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Table rows */}
+                    <div className="rounded-lg overflow-hidden"
+                      style={{ background: th.preview[1], border: `1px solid ${isLight ? "#e2e8f0" : "rgba(255,255,255,0.06)"}` }}>
+                      {[1, 0.5, 0.5].map((op, i) => (
+                        <div key={i} className="flex gap-1 px-1 py-0.5" style={{ borderBottom: i < 2 ? `1px solid ${th.preview[4]}` : "none" }}>
+                          <div className="h-1 rounded w-1/3" style={{ background: th.preview[2], opacity: op }}/>
+                          <div className="h-1 rounded w-1/4" style={{ background: th.preview[3], opacity: 0.5 }}/>
+                          <div className="h-1 rounded flex-1" style={{ background: isLight ? "#94a3b8" : "rgba(255,255,255,0.12)", opacity: 0.7 }}/>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="text-[10px] mt-0.5" style={{ color: th.preview[0] === "#f8fafc" ? "#6b7280" : "#71717a" }}>{th.desc}</div>
-                  <div className="flex gap-1 mt-1.5">
-                    {th.preview.map((c, i) => (
-                      <div key={i} className="w-3 h-3 rounded-full border" style={{ background: c, borderColor: "rgba(255,255,255,0.1)" }}/>
+
+                  {/* Checkmark */}
+                  {active && (
+                    <div className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center"
+                      style={{ background: th.preview[2] }}>
+                      <svg className="w-3 h-3 text-white" fill="none" stroke={isLight && th.preview[2] === "#4f46e5" ? "white" : "white"} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/>
+                      </svg>
+                    </div>
+                  )}
+                </div>
+
+                {/* Label area */}
+                <div className="px-3 py-3" style={{
+                  background: th.preview[1],
+                  borderTop: `1px solid ${isLight ? "#e2e8f0" : "rgba(255,255,255,0.06)"}`,
+                }}>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="text-sm">{emoji}</span>
+                    <span className="font-bold text-xs" style={{ color: isLight ? "#0f172a" : "#f8fafc" }}>
+                      {th.name}
+                    </span>
+                  </div>
+                  <p className="text-[10px] leading-tight" style={{ color: isLight ? "#64748b" : "#71717a" }}>
+                    {th.desc}
+                  </p>
+                  {/* Color swatches */}
+                  <div className="flex gap-1 mt-2">
+                    {th.preview.slice(0, 4).map((c, i) => (
+                      <div key={i} className="w-3 h-3 rounded-full"
+                        style={{ background: c, border: `1px solid ${isLight ? "#cbd5e1" : "rgba(255,255,255,0.15)"}` }} />
                     ))}
                   </div>
                 </div>
-                {active && (
-                  <div className="absolute top-2 right-2 w-5 h-5 bg-purple-500 rounded-full flex items-center justify-center">
-                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>
-                  </div>
-                )}
               </button>
             );
           })}
         </div>
 
-        <p className="text-zinc-600 text-[10px] text-center mt-4">Theme preference is saved automatically</p>
+        {/* Footer */}
+        <div className="px-6 pb-5 flex items-center justify-between">
+          <p className="text-slate-600 text-[10px]">Saved automatically · applies instantly</p>
+          <button
+            onClick={onClose}
+            className="px-4 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white transition-colors"
+            style={{ background: "rgba(255,255,255,0.06)" }}
+          >
+            Done
+          </button>
+        </div>
       </div>
     </div>
   );

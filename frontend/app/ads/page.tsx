@@ -99,7 +99,7 @@ function getBudgetAdjustmentTextColor(adjustment: string, budget: number): strin
 }
 
 export default function AdsPage() {
-  const { theme: t } = useTheme();
+  const { theme: t, themeKey } = useTheme();
   const [activeTab, setActiveTab] = useState("CELNEPHO");
   const [ads, setAds] = useState<AdRecord[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -437,19 +437,20 @@ export default function AdsPage() {
     return <span className={`truncate ${t.t3}`}>{value || "-"}</span>;
   };
 
-  const dark = t.page === "bg-slate-950";
-  const borderCls = dark ? "border-slate-700" : "border-gray-300";
-  const theadBg = dark ? "bg-slate-800" : "bg-gray-50";
-  const theadText = dark ? "text-slate-300" : "text-gray-600";
-  const tbodyBorder = dark ? "border-slate-700" : "border-gray-200";
-  const hoverRow = dark ? "hover:bg-slate-800" : "hover:bg-gray-50";
+  const dark = themeKey !== "light";
+  const borderCls = t.divider;
+  const theadBg = t.bar.split(" ")[0];
+  const theadText = t.t3;
+  const tbodyBorder = t.divider;
+  const hoverRow = `hover:bg-violet-500/10`;
   const inputCls = `${t.inp} rounded-lg text-sm`;
   const selectCls = `${t.inp} rounded-lg text-sm`;
 
   return (
-    <div className={`min-h-screen ${t.page}`}>
+    <>
       <Sidebar />
-      <div className="max-w-[1800px] mx-auto p-4 ml-64">
+      <div className={`flex-1 overflow-auto ${t.page}`}>
+      <div className="max-w-[1800px] mx-auto p-4">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className={`text-2xl font-bold ${t.t1}`}>Ads Management</h1>
@@ -607,7 +608,7 @@ export default function AdsPage() {
             <div className="space-y-4">
               <div>
                 <label className={`block text-sm font-medium ${t.t2} mb-1`}>Store</label>
-                <input value={activeTab} disabled className={`w-full px-4 py-2 border rounded-lg ${t.page === "bg-slate-950" ? "bg-slate-800 border-slate-700 text-slate-400" : "bg-gray-50"}`} />
+                <input value={activeTab} disabled className={`w-full px-4 py-2 border rounded-lg ${t.inp} opacity-60`} />
               </div>
               <div>
                 <label className={`block text-sm font-medium ${t.t2} mb-1`}>Date</label>
@@ -662,6 +663,7 @@ export default function AdsPage() {
           </div>
         </div>
       )}
-    </div>
+      </div>{/* flex-1 overflow-auto */}
+    </>
   );
 }

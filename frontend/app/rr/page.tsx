@@ -211,7 +211,7 @@ function UploadHistory({ uploads, onDelete, t }: { uploads: RRUpload[]; onDelete
               </div>
             </div>
             <button onClick={() => onDelete(u.id)}
-              className="text-gray-300 hover:text-red-500 p-1 rounded hover:bg-red-50 transition-colors text-xs shrink-0"
+              className={`${t.t5} hover:text-red-500 p-1 rounded hover:bg-red-500/10 transition-colors text-xs shrink-0`}
               title="Delete upload and its data">
               🗑
             </button>
