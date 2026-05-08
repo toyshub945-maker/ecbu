@@ -1103,14 +1103,21 @@ def get_all_products(store_code: Optional[str] = None, _: dict = Depends(auth.ge
         if store_code:
             tk = store_code[-1]
             cur.execute("""
-                SELECT product_no, warehouse_name, image_url, stores_available, sku
-                FROM products
-                WHERE stores_available IS NULL
-                   OR UPPER(stores_available) LIKE '%ALL%'
-                   OR stores_available LIKE ?
-                   OR stores_available LIKE ?
+                SELECT * FROM (
+                    SELECT product_no, warehouse_name, image_url, stores_available, sku
+                    FROM products
+                    WHERE stores_available IS NULL
+                       OR UPPER(stores_available) LIKE '%ALL%'
+                       OR stores_available LIKE ?
+                       OR stores_available LIKE ?
+                       OR stores_available = 'MANUAL'
+                    UNION
+                    SELECT p.product_no, p.warehouse_name, p.image_url, p.stores_available, p.sku
+                    FROM products p
+                    JOIN board_pins bp ON p.product_no = bp.product_no AND bp.store_code = ?
+                )
                 ORDER BY CAST(product_no AS INTEGER) ASC, product_no ASC
-            """, (f"%TK{tk}%", f"%TK {tk}%"))
+            """, (f"%TK{tk}%", f"%TK {tk}%", store_code))
         else:
             cur.execute("""
                 SELECT product_no, warehouse_name, image_url, stores_available, sku
