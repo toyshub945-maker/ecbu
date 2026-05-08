@@ -195,7 +195,7 @@ export interface PMMonthly {
 export interface PMDetail {
   product: { product_no: string; warehouse_name: string | null; image_url: string | null; sku: string | null; status: string | null; cost: number | null; stores_available: string | null };
   monthly: PMMonthly[];
-  stock: { total: number; groups: { sheet_name: string; variants: { sku: string; warehouse_name: string | null; stock: number; availability: string | null }[]; total: number }[] };
+  stock: { total: number; groups: { sheet_name: string; variants: { sku: string; warehouse_name: string | null; stock: number; availability: string | null; percent: number }[]; total: number }[] };
   pricing: Record<string, { price: number; price_max?: number; profit_with_ads: number | null; profit_without_ads: number | null; profit_with_ads_max?: number | null; profit_without_ads_max?: number | null }>;
   rr: { overall: number | null; by_store: Record<string, { order_qty: number; return_qty: number; rr_rate: number }> };
   performance: PerfTier;

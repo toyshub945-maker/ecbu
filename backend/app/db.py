@@ -122,6 +122,15 @@ CREATE TABLE IF NOT EXISTS board_pins (
     UNIQUE(store_code, product_no)
 );
 
+-- Products explicitly hidden/deleted from a store board (persists across refreshes)
+CREATE TABLE IF NOT EXISTS board_exclusions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_code  TEXT NOT NULL,
+    product_no  TEXT NOT NULL,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(store_code, product_no)
+);
+
 -- Raw order file uploads (for tracking purposes)
 CREATE TABLE IF NOT EXISTS order_file_uploads (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -341,6 +350,14 @@ def init_db(db_path: str | None = None) -> None:
             "ALTER TABLE warehouse_inventory ADD COLUMN sheet_id TEXT",
             "ALTER TABLE warehouse_inventory ADD COLUMN feishu_row_index INTEGER",
             # tiktok_export_analytics is new — created by IF NOT EXISTS above
+            # board_exclusions table (new — created by IF NOT EXISTS above)
+            """CREATE TABLE IF NOT EXISTS board_exclusions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                store_code TEXT NOT NULL,
+                product_no TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(store_code, product_no)
+            )""",
         ]
         for sql in migrations:
             try:

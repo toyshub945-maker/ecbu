@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -340,56 +340,91 @@ function StockSection({ stock, t }: { stock: PMDetail["stock"]; t: ThemeDef }) {
       </div>
     );
   }
-  const maxStock = Math.max(...stock.groups.flatMap(g => g.variants.map(v => v.stock)), 1);
 
   return (
-    <div className="space-y-4">
-      <div className={`${t.card} rounded-2xl p-4 border ${t.divider} flex items-center justify-between shadow-sm`}>
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-xl">📦</div>
+    <div className="space-y-5">
+      {/* Header Stat */}
+      <div className={`${t.card} rounded-3xl p-5 border ${t.divider} flex items-center justify-between shadow-sm relative overflow-hidden group`}>
+        <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+          <span className="text-6xl font-black">STOCK</span>
+        </div>
+        <div className="flex items-center gap-4 relative z-10">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-2xl text-white shadow-lg shadow-blue-200">📦</div>
           <div>
-            <div className={`text-[10px] ${t.t4} uppercase tracking-wider font-semibold`}>Total Stock</div>
-            <div className={`text-2xl font-bold ${t.t1}`}>{stock.total.toLocaleString()}</div>
+            <div className={`text-[10px] ${t.t4} uppercase tracking-[0.2em] font-black mb-0.5`}>Current Inventory</div>
+            <div className={`text-3xl font-black ${t.t1} tracking-tight`}>{stock.total.toLocaleString()} <span className={`text-sm font-bold ${t.t4}`}>units</span></div>
           </div>
         </div>
-        <div className={`text-xs font-bold px-3 py-1.5 rounded-xl border ${
-          stock.total === 0 ? "bg-red-50 text-red-700 border-red-200" :
-          stock.total < 50 ? "bg-amber-50 text-amber-700 border-amber-200" :
-          "bg-emerald-50 text-emerald-700 border-emerald-200"
+        <div className={`px-4 py-2 rounded-2xl font-black text-[10px] uppercase tracking-wider border shadow-sm relative z-10 ${
+          stock.total === 0 ? "bg-red-50 text-red-600 border-red-100" :
+          stock.total < 50 ? "bg-amber-50 text-amber-600 border-amber-100" :
+          "bg-emerald-50 text-emerald-600 border-emerald-100"
         }`}>
-          {stock.total === 0 ? "Out of Stock" : stock.total < 50 ? "Low Stock" : "In Stock"}
+          {stock.total === 0 ? "Out of Stock" : stock.total < 50 ? "Low Stock Level" : "Optimal Levels"}
         </div>
       </div>
 
-      {stock.groups.map(g => (
-        <div key={g.sheet_name} className={`${t.card} rounded-2xl border ${t.divider} overflow-hidden shadow-sm`}>
-          <div className={`flex items-center justify-between px-4 py-2.5 border-b ${t.divider} ${themeKey !== "light" ? "bg-slate-800" : "bg-gray-50"}`}>
-            <span className={`text-xs font-bold ${t.t2}`}>{g.sheet_name}</span>
-            <span className={`text-xs ${t.t4} font-medium`}>{g.total} units</span>
-          </div>
-          <div className="p-3 space-y-2.5">
-            {g.variants.map((v, i) => {
-              const pct = Math.round((v.stock / maxStock) * 100);
-              return (
-                <div key={i}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className={`text-xs ${t.t2} truncate max-w-[200px] font-medium`}>{v.warehouse_name || v.sku}</span>
-                    <span className={`text-xs font-bold ml-2 ${
-                      v.stock === 0 ? "text-red-600" : v.stock < 20 ? "text-amber-600" : "text-emerald-600"
-                    }`}>{v.stock}</span>
-                  </div>
-                  <div className={`h-1.5 ${t.bar} rounded-full overflow-hidden`}>
-                    <div className={`h-full rounded-full transition-all ${
-                      v.stock === 0 ? "bg-red-400" : v.stock < 20 ? "bg-amber-400" : "bg-emerald-500"
-                    }`} style={{width:`${Math.max(pct, v.stock > 0 ? 2 : 0)}%`}} />
-                  </div>
+      <div className="grid gap-5">
+        {stock.groups.map(g => (
+          <div key={g.sheet_name} className={`${t.card} rounded-3xl border ${t.divider} overflow-hidden shadow-sm`}>
+            <div className={`flex items-center justify-between px-5 py-3.5 border-b ${t.divider} ${themeKey !== "light" ? "bg-slate-800/50" : "bg-gray-50/80"}`}>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-blue-500" />
+                <span className={`text-xs font-black uppercase tracking-wider ${t.t2}`}>{g.sheet_name}</span>
+              </div>
+              <div className={`text-xs font-bold ${t.t1}`}>{g.total.toLocaleString()} <span className={t.t4}>total</span></div>
+            </div>
+            
+            <div className="p-2">
+              <div className="grid border border-transparent rounded-2xl overflow-hidden">
+                <div className={`grid grid-cols-[1fr_80px_100px_80px] px-4 py-2 text-[10px] font-black uppercase tracking-widest ${t.t4} border-b ${t.divider}`}>
+                  <div>Color / Variant</div>
+                  <div className="text-right">Stock</div>
+                  <div className="px-4 text-center">Share</div>
+                  <div className="text-right">Status</div>
                 </div>
-              );
-            })}
+                
+                {g.variants.map((v, i) => (
+                  <div key={i} className={`grid grid-cols-[1fr_80px_100px_80px] items-center px-4 py-3 border-b last:border-0 ${t.divider} hover:${themeKey !== "light" ? "bg-white/5" : "bg-gray-50/50"} transition-colors`}>
+                    <div className="min-w-0">
+                      <div className={`text-xs font-bold ${t.t2} truncate`}>{v.warehouse_name || v.sku}</div>
+                      <div className={`text-[10px] ${t.t4} font-medium mt-0.5 truncate opacity-60`}>{v.sku}</div>
+                    </div>
+                    
+                    <div className="text-right">
+                      <span className={`text-xs font-black ${
+                        v.stock === 0 ? "text-red-500" : v.stock < 10 ? "text-amber-500" : t.t1
+                      }`}>{v.stock.toLocaleString()}</span>
+                    </div>
+
+                    <div className="px-4">
+                      <div className="flex items-center gap-2">
+                        <div className={`flex-1 h-1 ${t.bar} rounded-full overflow-hidden`}>
+                          <div 
+                            className={`h-full rounded-full ${v.stock === 0 ? "bg-red-400" : "bg-blue-500"}`} 
+                            style={{ width: `${v.percent}%` }}
+                          />
+                        </div>
+                        <span className={`text-[10px] font-bold ${t.t4} w-8 text-right`}>{v.percent}%</span>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <span className={`text-[10px] font-black uppercase ${
+                        v.stock === 0 ? "text-red-500" : v.stock < 10 ? "text-amber-500" : "text-emerald-500"
+                      }`}>
+                        {v.stock === 0 ? "Empty" : v.stock < 10 ? "Critical" : "Good"}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
-      ))}
-    </div>  );
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // ─── Pricing Section ──────────────────────────────────────────────────────────

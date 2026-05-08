@@ -122,6 +122,14 @@ export const api = {
   unpinProduct: (store_code: string, product_no: string) =>
     request<{ ok: boolean }>(`/board/pin/${store_code}/${encodeURIComponent(product_no)}`, { method: "DELETE" }),
 
+  // Permanently hide a product from a store board (persists across refreshes)
+  excludeProduct: (store_code: string, product_no: string) =>
+    request<{ ok: boolean }>("/board/exclude", { method: "POST", body: JSON.stringify({ store_code, product_no }) }),
+
+  // Restore a previously hidden product back to the board
+  restoreProduct: (store_code: string, product_no: string) =>
+    request<{ ok: boolean }>(`/board/exclude/${store_code}/${encodeURIComponent(product_no)}`, { method: "DELETE" }),
+
   updateBoardOrder: (product_nos: string[]) =>
     request<{ ok: boolean }>("/board/order", { method: "PUT", body: JSON.stringify({ product_nos }) }),
 
@@ -235,6 +243,9 @@ export const api = {
     ),
   getTiktokExportData: (store_code: string, period_start: string, period_end: string) =>
     request<{ rows: any[] }>(`/analytics/tiktok-export/${store_code}/${period_start}/${period_end}`),
+
+  deleteTiktokExport: (store_code: string, period_start: string, period_end: string) =>
+    request<{ ok: boolean }>(`/analytics/tiktok-export/${store_code}/${period_start}/${period_end}`, { method: "DELETE" }),
 
   // Monthly Targets
   getTargets: () => request<{ targets: any[] }>("/targets"),

@@ -134,6 +134,11 @@ def delete_user(user_id: int, current_user: dict = Depends(auth.require_admin)):
 
 # ─── Stores ──────────────────────────────────────────────────────────────────
 
+@app.get("/api/health")
+def health_check():
+    return {"status": "ok"}
+
+
 @app.get("/api/stores")
 def list_stores():
     return {"stores": config.STORES}
@@ -393,7 +398,11 @@ def get_board(store_code: str, period_id: int, current_user: dict | None = None)
         if not period:
             raise HTTPException(404, "Period not found")
 
-        # Load products for this store (Feishu-filtered + manually pinned)
+        # Load excluded product nos for this store
+        cur.execute("SELECT product_no FROM board_exclusions WHERE store_code=?", (store_code,))
+        excluded_nos = {r[0] for r in cur.fetchall()}
+
+        # Load products for this store (Feishu-filtered + manually pinned, minus exclusions)
         cur.execute("""
             SELECT * FROM (
                 SELECT DISTINCT p.* FROM products p
@@ -412,16 +421,17 @@ def get_board(store_code: str, period_id: int, current_user: dict | None = None)
         all_products = [dict(r) for r in cur.fetchall()]
 
         # Filter to this store (keeps pinned products even if stores_available doesn't match)
-        pinned_cur = cur
+        # Also remove any explicitly excluded products
         cur.execute("SELECT product_no FROM board_pins WHERE store_code=?", (store_code,))
         pinned_nos = {r[0] for r in cur.fetchall()}
 
         products = [
             p for p in all_products
-            if p["product_no"] in pinned_nos or _product_in_store(p["stores_available"], store_code)
+            if p["product_no"] not in excluded_nos
+            and (p["product_no"] in pinned_nos or _product_in_store(p["stores_available"], store_code))
         ]
         if not products and all_products:
-            products = all_products
+            products = [p for p in all_products if p["product_no"] not in excluded_nos]
 
         product_nos = [p["product_no"] for p in products]
         if not product_nos:
@@ -452,19 +462,37 @@ def get_board(store_code: str, period_id: int, current_user: dict | None = None)
         )
         notes_rows = cur.fetchall()
 
-        # Load most-recently imported TikTok export analytics per product
+        # Load TikTok export analytics that match the selected period's date range.
+        # Strategy 1: exact date match (upload covers exactly this week)
         cur.execute(
             f"""SELECT t.* FROM tiktok_export_analytics t
-                INNER JOIN (
-                    SELECT product_no, MAX(imported_at) as max_ia
-                    FROM tiktok_export_analytics
-                    WHERE store_code=?
-                    GROUP BY product_no
-                ) latest ON t.product_no = latest.product_no AND t.imported_at = latest.max_ia
-                WHERE t.store_code=? AND t.product_no IN ({placeholders})""",
-            [store_code, store_code] + product_nos,
+                WHERE t.store_code=?
+                AND t.period_start = ?
+                AND t.period_end   = ?
+                AND t.product_no IN ({placeholders})""",
+            [store_code, period["period_start"], period["period_end"]] + product_nos,
         )
         tk_export_rows = cur.fetchall()
+
+        # Strategy 2: if no exact match, use uploads whose date range overlaps the period
+        # (handles slight date mismatches, e.g. upload covers Mon-Sun vs Mon-Sun+1)
+        if not tk_export_rows:
+            cur.execute(
+                f"""SELECT t.* FROM tiktok_export_analytics t
+                    INNER JOIN (
+                        SELECT product_no, MAX(imported_at) as max_ia
+                        FROM tiktok_export_analytics
+                        WHERE store_code=?
+                          AND period_start <= ?
+                          AND period_end   >= ?
+                        GROUP BY product_no
+                    ) latest ON t.product_no = latest.product_no
+                           AND t.imported_at = latest.max_ia
+                    WHERE t.store_code=? AND t.product_no IN ({placeholders})""",
+                [store_code, period["period_end"], period["period_start"],
+                 store_code] + product_nos,
+            )
+            tk_export_rows = cur.fetchall()
 
         # Load users for assignment dropdowns
         cur.execute("SELECT id, name, role, store_code FROM users WHERE store_code=? OR store_code IS NULL ORDER BY name", (store_code,))
@@ -520,8 +548,12 @@ def _product_in_store(stores_available: str | None, store_code: str) -> bool:
     s = stores_available.upper()
     if "ALL" in s or s == "MANUAL":
         return True
+    if store_code == "SHEIN":
+        return "SHEIN" in s
     num = store_code[-1]  # "1" from "TK1"
-    return f"TK {num}" in s or f"TK{num}" in s
+    # Match TK1, TK 1, TT1, TT 1
+    return (f"TK {num}" in s or f"TK{num}" in s or 
+            f"TT {num}" in s or f"TT{num}" in s)
 
 
 # ─── Tasks ───────────────────────────────────────────────────────────────────
@@ -885,6 +917,20 @@ def get_tiktok_export_data(
         return {"rows": [dict(r) for r in cur.fetchall()]}
 
 
+@app.delete("/api/analytics/tiktok-export/{store_code}/{period_start}/{period_end}")
+def delete_tiktok_export(
+    store_code: str, period_start: str, period_end: str,
+    _: dict = Depends(auth.get_current_user),
+):
+    """Delete all analytics rows for a given period."""
+    with db.db_cursor() as cur:
+        cur.execute("""
+            DELETE FROM tiktok_export_analytics
+            WHERE store_code=? AND period_start=? AND period_end=?
+        """, (store_code, period_start, period_end))
+    return {"ok": True}
+
+
 # ─── Dashboard summary ────────────────────────────────────────────────────────
 
 @app.get("/api/dashboard/summary")
@@ -1101,23 +1147,36 @@ def get_all_products(store_code: Optional[str] = None, _: dict = Depends(auth.ge
     """Return all products, optionally filtered to a store."""
     with db.db_cursor() as cur:
         if store_code:
-            tk = store_code[-1]
-            cur.execute("""
-                SELECT * FROM (
+            if store_code == "SHEIN":
+                cur.execute("""
                     SELECT product_no, warehouse_name, image_url, stores_available, sku
                     FROM products
                     WHERE stores_available IS NULL
                        OR UPPER(stores_available) LIKE '%ALL%'
-                       OR stores_available LIKE ?
-                       OR stores_available LIKE ?
+                       OR UPPER(stores_available) LIKE '%SHEIN%'
                        OR stores_available = 'MANUAL'
-                    UNION
-                    SELECT p.product_no, p.warehouse_name, p.image_url, p.stores_available, p.sku
-                    FROM products p
-                    JOIN board_pins bp ON p.product_no = bp.product_no AND bp.store_code = ?
-                )
-                ORDER BY CAST(product_no AS INTEGER) ASC, product_no ASC
-            """, (f"%TK{tk}%", f"%TK {tk}%", store_code))
+                    ORDER BY CAST(product_no AS INTEGER) ASC, product_no ASC
+                """)
+            else:
+                tk = store_code[-1]
+                cur.execute("""
+                    SELECT * FROM (
+                        SELECT product_no, warehouse_name, image_url, stores_available, sku
+                        FROM products
+                        WHERE stores_available IS NULL
+                           OR UPPER(stores_available) LIKE '%ALL%'
+                           OR stores_available LIKE ?
+                           OR stores_available LIKE ?
+                           OR stores_available LIKE ?
+                           OR stores_available LIKE ?
+                           OR stores_available = 'MANUAL'
+                        UNION
+                        SELECT p.product_no, p.warehouse_name, p.image_url, p.stores_available, p.sku
+                        FROM products p
+                        JOIN board_pins bp ON p.product_no = bp.product_no AND bp.store_code = ?
+                    )
+                    ORDER BY CAST(product_no AS INTEGER) ASC, product_no ASC
+                """, (f"%TK{tk}%", f"%TK {tk}%", f"%TT{tk}%", f"%TT {tk}%", store_code))
         else:
             cur.execute("""
                 SELECT product_no, warehouse_name, image_url, stores_available, sku
@@ -1213,6 +1272,47 @@ def list_pins(store_code: str, _: dict = Depends(auth.get_current_user)):
     with db.db_cursor() as cur:
         cur.execute("SELECT product_no FROM board_pins WHERE store_code=?", (store_code,))
         return {"pins": [r[0] for r in cur.fetchall()]}
+
+
+# ─── Board exclusions (persistent hide / delete from board) ───────────────────
+
+class ExcludeRequest(BaseModel):
+    store_code: str
+    product_no: str
+
+
+@app.post("/api/board/exclude", status_code=201)
+def exclude_product(req: ExcludeRequest, _: dict = Depends(auth.get_current_user)):
+    """Permanently hide a product from a store's board across all periods."""
+    with db.db_cursor() as cur:
+        cur.execute(
+            "INSERT OR IGNORE INTO board_exclusions (store_code, product_no) VALUES (?,?)",
+            (req.store_code, req.product_no),
+        )
+        # Also remove any pin so it doesn't sneak back in
+        cur.execute(
+            "DELETE FROM board_pins WHERE store_code=? AND product_no=?",
+            (req.store_code, req.product_no),
+        )
+    return {"ok": True}
+
+
+@app.delete("/api/board/exclude/{store_code}/{product_no}")
+def restore_product(store_code: str, product_no: str, _: dict = Depends(auth.get_current_user)):
+    """Restore a previously hidden product back to the board."""
+    with db.db_cursor() as cur:
+        cur.execute(
+            "DELETE FROM board_exclusions WHERE store_code=? AND product_no=?",
+            (store_code, product_no),
+        )
+    return {"ok": True}
+
+
+@app.get("/api/board/exclusions/{store_code}")
+def list_exclusions(store_code: str, _: dict = Depends(auth.get_current_user)):
+    with db.db_cursor() as cur:
+        cur.execute("SELECT product_no FROM board_exclusions WHERE store_code=?", (store_code,))
+        return {"exclusions": [r[0] for r in cur.fetchall()]}
 
 
 # ─── Analytics manual update ─────────────────────────────────────────────────

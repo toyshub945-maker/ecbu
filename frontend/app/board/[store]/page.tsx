@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
@@ -128,31 +128,39 @@ function MetricsModal({
     ads_spend:                a.ads_spend != null                ? (a.ads_spend === -1 ? "On" : String(a.ads_spend)) : "",
     gmv:                      a.gmv != null                      ? String(a.gmv)                                  : tkNum(tk?.gmv),
     roi:                      a.roi != null                      ? String(a.roi)                                   : "",
-    selling_price:            (a as Record<string,unknown>).selling_price != null ? String((a as Record<string,unknown>).selling_price) : "",
-    cost_rmb:                 (a as Record<string,unknown>).cost_rmb != null      ? String((a as Record<string,unknown>).cost_rmb)      : "",
-    profit_margin:            (a as Record<string,unknown>).profit_margin != null ? String((a as Record<string,unknown>).profit_margin) : "",
   });
+
+  // Pricing data — always loaded fresh from the Pricing tab (read-only, not part of analytics save)
+  const [pricingData, setPricingData] = useState<{
+    cost_rmb: number | null;
+    selling_price: number | null;
+    selling_price_max: number | null;
+    profit_with_ads: number | null;
+    profit_without_ads: number | null;
+    loaded: boolean;
+  }>({ cost_rmb: null, selling_price: null, selling_price_max: null, profit_with_ads: null, profit_without_ads: null, loaded: false });
+
   const [saving, setSaving] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
 
+  // Always fetch pricing fresh on open — no store_code filter so we get cost even without store price
   useEffect(() => {
-    if (fields.selling_price || fields.cost_rmb) return;
-    api.getPricing(storeCode, product.product_no).then(res => {
+    api.getPricing(undefined, product.product_no).then(res => {
       const p = res.products.find(x => x.product_no === product.product_no);
-      if (!p) return;
-      const storeData = p.stores[storeCode];
-      setFields(prev => ({
-        ...prev,
-        cost_rmb:      prev.cost_rmb      || (p.cost_rmb != null ? String(p.cost_rmb) : prev.cost_rmb),
-        selling_price: prev.selling_price  || (storeData?.price != null ? String(storeData.price) : prev.selling_price),
-        profit_margin: prev.profit_margin  || (storeData?.profit_with_ads != null ? String(storeData.profit_with_ads) : prev.profit_margin),
-      }));
-    }).catch(() => {});
+      const storeData = p?.stores?.[storeCode] ?? null;
+      setPricingData({
+        cost_rmb:          p?.cost_rmb          ?? null,
+        selling_price:     storeData?.price     ?? null,
+        selling_price_max: (storeData as any)?.price_max ?? null,
+        profit_with_ads:   storeData?.profit_with_ads   ?? null,
+        profit_without_ads: storeData?.profit_without_ads ?? null,
+        loaded: true,
+      });
+    }).catch(() => { setPricingData(prev => ({ ...prev, loaded: true })); });
   }, [storeCode, product.product_no]); // eslint-disable-line
 
   useEffect(() => {
     api.getAnalyticsHistory(storeCode, product.product_no).then(res => {
-      // Format data for chart
       const formatted = res.history.map(row => ({
         name: row.label || row.period_start,
         Impressions: row.impressions || 0,
@@ -169,8 +177,8 @@ function MetricsModal({
           "video_impressions","product_card_impressions","live_impressions",
           "items_sold","ctor","content_gmv","gmv"] : []
   );
-  const PRICING_SOURCED_FIELDS = new Set<string>(["selling_price","cost_rmb","profit_margin"]);
 
+  // Revenue & Cost is now a dedicated read-only section — removed from editable groups
   const METRIC_GROUPS = [
     {
       label: "Traffic & Conversion",
@@ -200,12 +208,10 @@ function MetricsModal({
       ],
     },
     {
-      label: "Revenue & Cost",
+      label: "Revenue",
       fields: [
         { key: "gmv", label: "GMV ($)", pct: false },
-        { key: "selling_price", label: "Selling Price", pct: false },
-        { key: "cost_rmb", label: "Cost (RMB)", pct: false },
-        { key: "profit_margin", label: "Profit Margin (%)", pct: false },
+        { key: "roi", label: "ROI (%)", pct: false },
       ],
     },
   ];
@@ -215,7 +221,7 @@ function MetricsModal({
     if (!v) return null;
     if (key === "ads_spend" && v.toLowerCase() === "on") return -1;
     if (key === "selling_price") return val.trim() || null;
-    const pctFields = ["ctr", "cvr", "ctor", "profit_margin"];
+    const pctFields = ["ctr", "cvr", "ctor"];
     const n = parseFloat(v);
     if (isNaN(n)) return null;
     return pctFields.includes(key) ? n / 100 : n;
@@ -283,18 +289,16 @@ function MetricsModal({
               <div className="grid grid-cols-2 gap-2">
                 {group.fields.map(f => {
                   const fromTk = TK_SOURCED_FIELDS.has(f.key) && (product.analytics as any)?.[f.key] == null && fields[f.key] !== "";
-                  const fromPricing = PRICING_SOURCED_FIELDS.has(f.key) && (product.analytics as any)?.[f.key] == null && fields[f.key] !== "";
                   return (
                     <div key={f.key}>
                       <label className={`text-xs ${t.t3} block mb-0.5 flex items-center gap-1`}>
                         {f.label}{f.note ? <span className={`${t.t4} ml-1`}>({f.note})</span> : ""}
                         {fromTk && <span className="bg-sky-100 text-sky-600 px-1 py-0 rounded text-[9px] font-bold ml-1">TK</span>}
-                        {fromPricing && <span className="bg-emerald-100 text-emerald-600 px-1 py-0 rounded text-[9px] font-bold ml-1">P</span>}
                       </label>
                       <input
                         value={fields[f.key] ?? ""}
                         onChange={e => setFields(prev => ({ ...prev, [f.key]: e.target.value }))}
-                        className={`w-full border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 ${t.inp} ${fromTk ? "border-sky-500/30" : fromPricing ? "border-emerald-500/30" : ""}`}
+                        className={`w-full border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 ${t.inp} ${fromTk ? "border-sky-500/30" : ""}`}
                         placeholder="–"
                       />
                     </div>
@@ -303,6 +307,101 @@ function MetricsModal({
               </div>
             </div>
           ))}
+
+          {/* ── Pricing Card — always synced from Pricing tab ─────────────── */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className={`text-xs font-bold ${t.t4} uppercase flex items-center gap-1.5`}>
+                💰 Cost &amp; Pricing
+                <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0 rounded text-[9px] font-bold normal-case tracking-normal">
+                  Synced from Pricing Tab
+                </span>
+              </h4>
+              <a href="/pricing" target="_blank" rel="noopener noreferrer"
+                className="text-[10px] text-violet-500 hover:text-violet-700 underline underline-offset-2">
+                Edit in Pricing →
+              </a>
+            </div>
+
+            {!pricingData.loaded ? (
+              <div className={`rounded-xl border ${t.divider} p-4 flex items-center justify-center gap-2 ${t.card2}`}>
+                <svg className="w-4 h-4 animate-spin text-emerald-500" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                </svg>
+                <span className={`text-xs ${t.t4}`}>Loading pricing data…</span>
+              </div>
+            ) : pricingData.cost_rmb == null && pricingData.selling_price == null ? (
+              <div className={`rounded-xl border ${t.divider} p-4 ${t.card2}`}>
+                <div className={`text-xs ${t.t4} text-center`}>
+                  No pricing data found for this product.{" "}
+                  <a href="/pricing" target="_blank" rel="noopener noreferrer" className="text-violet-500 underline">
+                    Add pricing →
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <div className={`rounded-xl border border-emerald-200 overflow-hidden`} style={{ background: "rgba(16,185,129,0.04)" }}>
+                <div className="grid grid-cols-2 divide-x divide-y" style={{ borderColor: "#d1fae5" }}>
+                  {/* Cost RMB */}
+                  <div className="p-3">
+                    <div className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider mb-1">Cost (RMB)</div>
+                    <div className={`text-base font-bold ${t.t1}`}>
+                      {pricingData.cost_rmb != null ? `¥${pricingData.cost_rmb}` : <span className={t.t5}>—</span>}
+                    </div>
+                    {pricingData.cost_rmb != null && (
+                      <div className={`text-[10px] ${t.t4} mt-0.5`}>
+                        ≈ ${((pricingData.cost_rmb / 7) + 11).toFixed(2)} USD landed
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Selling Price */}
+                  <div className="p-3">
+                    <div className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider mb-1">
+                      Selling Price ({storeCode})
+                    </div>
+                    <div className={`text-base font-bold ${t.t1}`}>
+                      {pricingData.selling_price != null ? (
+                        <>
+                          ${pricingData.selling_price.toFixed(2)}
+                          {pricingData.selling_price_max != null && pricingData.selling_price_max !== pricingData.selling_price && (
+                            <span className={`text-xs font-normal ${t.t4} ml-1`}>
+                              – ${pricingData.selling_price_max.toFixed(2)}
+                            </span>
+                          )}
+                        </>
+                      ) : <span className={t.t5}>No price set for {storeCode}</span>}
+                    </div>
+                  </div>
+
+                  {/* Profit with Ads */}
+                  <div className="p-3">
+                    <div className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider mb-1">Profit w/ Ads</div>
+                    <div className={`text-base font-bold ${
+                      pricingData.profit_with_ads == null ? t.t5 :
+                      pricingData.profit_with_ads > 15 ? "text-emerald-600" :
+                      pricingData.profit_with_ads > 5  ? "text-amber-600"  : "text-red-500"
+                    }`}>
+                      {pricingData.profit_with_ads != null ? `${pricingData.profit_with_ads.toFixed(1)}%` : "—"}
+                    </div>
+                  </div>
+
+                  {/* Profit without Ads */}
+                  <div className="p-3">
+                    <div className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider mb-1">Profit w/o Ads</div>
+                    <div className={`text-base font-bold ${
+                      pricingData.profit_without_ads == null ? t.t5 :
+                      pricingData.profit_without_ads > 20 ? "text-emerald-600" :
+                      pricingData.profit_without_ads > 10 ? "text-amber-600"  : "text-red-500"
+                    }`}>
+                      {pricingData.profit_without_ads != null ? `${pricingData.profit_without_ads.toFixed(1)}%` : "—"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* TikTok Export Analytics section */}
           {product.tk_export && (
@@ -1649,11 +1748,24 @@ function DataUploadPanel({
                 <h4 className={`text-xs font-semibold ${t.t4} uppercase mb-2`}>Imported Periods</h4>
                 <div className="space-y-1.5">
                   {tkPeriods.map((p, i) => (
-                    <div key={i} className="flex items-center gap-3 text-xs bg-sky-50 rounded-lg px-3 py-2">
+                    <div key={i} className="flex items-center gap-3 text-xs bg-sky-50 rounded-lg px-3 py-2 group hover:bg-sky-100 transition-colors">
                       <span className="font-medium text-sky-700">{p.period_start} → {p.period_end}</span>
                       <span className="text-sky-500 ml-auto">{p.product_count} products</span>
                       <span className="text-sky-400">${p.total_gmv.toLocaleString(undefined, { maximumFractionDigits: 0 })} GMV</span>
                       <span className={`${t.t4}`}>{new Date(p.imported_at).toLocaleDateString()}</span>
+                      <button 
+                        onClick={async () => {
+                          if (confirm(`Delete analytics for ${p.period_start} → ${p.period_end}?`)) {
+                            try { 
+                              await api.deleteTiktokExport(storeCode, p.period_start, p.period_end); 
+                              loadTkPeriods(); 
+                            } catch (e: any) { alert(`Failed to delete: ${e.message}`); }
+                          }
+                        }} 
+                        className="text-red-400 hover:text-red-600 font-medium ml-2 px-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        delete
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -2361,9 +2473,14 @@ export default function BoardPage() {
                         onUpdated={loadBoard} onNotes={() => setNotesProduct(product)}
                         onMetrics={() => setMetricsProduct(product)}
                         onHide={async () => {
-                          if (confirm("Hide this product from the board?")) {
-                            await api.unpinProduct(storeCode, product.product_no);
-                            setBoard(prev => prev ? { ...prev, products: prev.products.filter(p => p.product_no !== product.product_no) } : prev);
+                          if (confirm("Remove this product from the board? It will be permanently hidden from this store until restored.")) {
+                            try {
+                              await api.excludeProduct(storeCode, product.product_no);
+                              // Instantly remove from local state so UI updates immediately
+                              setBoard(prev => prev ? { ...prev, products: prev.products.filter(p => p.product_no !== product.product_no) } : prev);
+                            } catch (e: any) {
+                              alert(`Failed to remove product: ${e.message}`);
+                            }
                           }
                         }}
                         onTaskUpdate={(t, u) => updateProductTask(product.product_no, t, u)}
