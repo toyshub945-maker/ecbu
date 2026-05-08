@@ -52,6 +52,13 @@ module.exports = {
     // ── Tab active/inactive ───────────────────────────────────────────────────
     "border-violet-500", "border-indigo-600", "border-teal-500",
     "text-violet-300", "text-indigo-700", "text-teal-300",
+    // ── Shein pink ───────────────────────────────────────────────────────────
+    "bg-pink-50", "bg-pink-100", "bg-pink-500", "bg-pink-600",
+    "text-pink-400", "text-pink-500", "text-pink-600", "text-pink-700", "text-pink-900",
+    "border-pink-100", "border-pink-200", "border-pink-400",
+    "hover:bg-pink-600",
+    "from-pink-50", "to-rose-50", "from-pink-400", "to-rose-500",
+    "ring-pink-400",
   ],
   theme: { extend: {} },
   plugins: [],

@@ -425,19 +425,82 @@ function MyCredentialsPanel({
   );
 }
 
+// ─── Reusable user row ────────────────────────────────────────────────────────
+function UserRow({
+  u, isAdmin, currentUserId, onEdit, onDelete, t, isSheinRow,
+}: {
+  u: User; isAdmin: boolean; currentUserId?: number;
+  onEdit: (u: User) => void; onDelete: (id: number) => void;
+  t: ReturnType<typeof useTheme>["theme"]; isSheinRow?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-3 py-3 group">
+      <div className={`w-9 h-9 rounded-full text-sm font-bold flex items-center justify-center shrink-0 ${isSheinRow ? "bg-pink-100 text-pink-700" : t.accentSoft}`}>
+        {u.name.charAt(0).toUpperCase()}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className={`font-medium text-sm ${t.t1} flex items-center gap-2`}>
+          {u.name}
+          {isSheinRow ? (
+            <span className="text-xs px-1.5 py-0.5 rounded font-medium bg-pink-100 text-pink-700">Shein</span>
+          ) : (
+            <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${ROLE_COLORS[u.role] ?? "bg-gray-100 text-gray-600"}`}>
+              {ROLE_LABELS[u.role] ?? u.role}
+            </span>
+          )}
+        </div>
+        <div className={`text-xs ${t.t5}`}>{u.email}</div>
+      </div>
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {isAdmin && (
+          <button
+            onClick={() => onEdit(u)}
+            className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg font-medium ${t.t3} border ${t.divider} hover:border-violet-400 transition-colors`}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            Edit
+          </button>
+        )}
+        {isAdmin && u.id !== currentUserId && (
+          <button
+            onClick={() => onDelete(u.id)}
+            className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg font-medium text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Remove
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function SettingsPage() {
   const router = useRouter();
   const { theme: t } = useTheme();
   const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
   const [editTarget, setEditTarget] = useState<User | null>(null);
-  const [form, setForm] = useState({ name: "", email: "", password: "", role: "member", store_code: "" });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [feishuStatus, setFeishuStatus] = useState<{ product_count: number; last_synced_at: string | null } | null>(null);
+
+  // ── TK team form state ──────────────────────────────────────────────────────
+  const [showCreateTK, setShowCreateTK] = useState(false);
+  const [tkForm, setTKForm] = useState({ name: "", email: "", password: "", role: "member", store_code: "" });
+  const [tkSaving, setTKSaving] = useState(false);
+  const [tkError, setTKError] = useState("");
+  const [tkSuccess, setTKSuccess] = useState("");
+
+  // ── Shein team form state ───────────────────────────────────────────────────
+  const [showCreateShein, setShowCreateShein] = useState(false);
+  const [sheinForm, setSheinForm] = useState({ name: "", email: "", password: "", role: "member" });
+  const [sheinSaving, setSheinSaving] = useState(false);
+  const [sheinError, setSheinError] = useState("");
+  const [sheinSuccess, setSheinSuccess] = useState("");
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -453,138 +516,127 @@ export default function SettingsPage() {
     setUsers(data.users);
   }
 
-  async function createUser() {
-    if (!form.name || !form.email || !form.password) { setError("Name, email and password required"); return; }
-    setSaving(true); setError(""); setSuccess("");
+  async function createTKUser() {
+    if (!tkForm.name || !tkForm.email || !tkForm.password) { setTKError("Name, email and password required"); return; }
+    setTKSaving(true); setTKError(""); setTKSuccess("");
     try {
-      await api.createUser({ ...form, store_code: form.store_code || undefined });
-      setSuccess("User created successfully");
-      setForm({ name: "", email: "", password: "", role: "member", store_code: "" });
-      setShowCreate(false);
+      await api.createUser({ ...tkForm, store_code: tkForm.store_code || undefined });
+      setTKSuccess("Team member added successfully");
+      setTKForm({ name: "", email: "", password: "", role: "member", store_code: "" });
+      setShowCreateTK(false);
       loadUsers();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to create user");
-    } finally {
-      setSaving(false);
-    }
+      setTKError(e instanceof Error ? e.message : "Failed to create user");
+    } finally { setTKSaving(false); }
+  }
+
+  async function createSheinUser() {
+    if (!sheinForm.name || !sheinForm.email || !sheinForm.password) { setSheinError("Name, email and password required"); return; }
+    setSheinSaving(true); setSheinError(""); setSheinSuccess("");
+    try {
+      await api.createUser({ ...sheinForm, store_code: "SHEIN" });
+      setSheinSuccess("Shein member added successfully");
+      setSheinForm({ name: "", email: "", password: "", role: "member" });
+      setShowCreateShein(false);
+      loadUsers();
+    } catch (e: unknown) {
+      setSheinError(e instanceof Error ? e.message : "Failed to create user");
+    } finally { setSheinSaving(false); }
   }
 
   async function deleteUser(id: number) {
-    if (!confirm("Delete this user?")) return;
-    try {
-      await api.deleteUser(id);
-      loadUsers();
-    } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : "Failed");
-    }
+    if (!confirm("Remove this user?")) return;
+    try { await api.deleteUser(id); loadUsers(); }
+    catch (e: unknown) { alert(e instanceof Error ? e.message : "Failed"); }
   }
 
   const isAdmin = currentUser?.role === "admin";
+  const tkUsers    = users.filter(u => u.store_code !== "SHEIN");
+  const sheinUsers = users.filter(u => u.store_code === "SHEIN");
 
   return (
     <>
       <Sidebar />
 
-      {/* Edit credentials modal */}
       {editTarget && (
-        <EditUserModal
-          user={editTarget}
-          onClose={() => setEditTarget(null)}
-          onSaved={loadUsers}
-          t={t}
-        />
+        <EditUserModal user={editTarget} onClose={() => setEditTarget(null)} onSaved={loadUsers} t={t} />
       )}
 
       <main className={`flex-1 p-6 overflow-auto ${t.page}`}>
-        <div className="max-w-3xl mx-auto">
-          <h1 className={`text-2xl font-bold ${t.t1} mb-6`}>Settings</h1>
+        <div className="max-w-3xl mx-auto space-y-5">
+          <h1 className={`text-2xl font-bold ${t.t1}`}>Settings</h1>
 
-          {/* ── My Credentials (every user) ─────────────────────────────── */}
+          {/* ── My Credentials ──────────────────────────────────────────── */}
           {currentUser && (
             <MyCredentialsPanel currentUser={currentUser} onSaved={loadUsers} t={t} />
           )}
 
           {/* ── Feishu Status ──────────────────────────────────────────── */}
-          <section className={`${t.card} rounded-xl p-5 mb-5`}>
+          <section className={`${t.card} rounded-xl p-5`}>
             <h2 className={`font-semibold ${t.t2} mb-3`}>Feishu Product Database</h2>
             {feishuStatus ? (
               <div className="flex items-center gap-4 text-sm">
-                <div>
-                  <span className={t.t4}>Products synced:</span>{" "}
-                  <strong className={t.t1}>{feishuStatus.product_count}</strong>
-                </div>
+                <div><span className={t.t4}>Products synced:</span>{" "}<strong className={t.t1}>{feishuStatus.product_count}</strong></div>
                 <div>
                   <span className={t.t4}>Last sync:</span>{" "}
-                  <strong className={t.t1}>
-                    {feishuStatus.last_synced_at
-                      ? new Date(feishuStatus.last_synced_at).toLocaleString()
-                      : "Never"}
-                  </strong>
+                  <strong className={t.t1}>{feishuStatus.last_synced_at ? new Date(feishuStatus.last_synced_at).toLocaleString() : "Never"}</strong>
                 </div>
               </div>
-            ) : (
-              <p className={`text-sm ${t.t5}`}>Loading…</p>
-            )}
+            ) : <p className={`text-sm ${t.t5}`}>Loading…</p>}
             <p className={`text-xs ${t.t5} mt-3`}>
-              Use the <strong className={t.t3}>Sync from Feishu</strong> button on the Dashboard to pull product data and images from your Feishu master sheet.
+              Use the <strong className={t.t3}>Sync from Feishu</strong> button on the Dashboard to pull product data and images.
               Make sure <code className={`${t.bar} px-1 rounded`}>FEISHU_APP_SECRET</code> is set in the <code className={`${t.bar} px-1 rounded`}>.env</code> file.
             </p>
           </section>
 
-          {/* ── Team Members ──────────────────────────────────────────── */}
+          {/* ── TikTok Team Members ──────────────────────────────────────── */}
           <section className={`${t.card} rounded-xl p-5`}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className={`font-semibold ${t.t2}`}>Team Members</h2>
+            <div className="flex items-center justify-between mb-1">
+              <div>
+                <h2 className={`font-semibold ${t.t2} flex items-center gap-2`}>
+                  <span>TikTok Team</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${t.bar} ${t.t4} font-normal`}>{tkUsers.length} members</span>
+                </h2>
+                <p className={`text-xs ${t.t5} mt-0.5`}>Full dashboard access · store-based workflow</p>
+              </div>
               {isAdmin && (
                 <button
-                  onClick={() => { setShowCreate(v => !v); setError(""); setSuccess(""); }}
+                  onClick={() => { setShowCreateTK(v => !v); setTKError(""); setTKSuccess(""); }}
                   className={`text-sm ${t.btn} px-3 py-1.5 rounded-lg font-medium`}
-                >
-                  + Add Member
-                </button>
+                >+ Add Member</button>
               )}
             </div>
 
-            {success && (
-              <div className="bg-green-50 border border-green-200 text-green-700 text-sm px-3 py-2 rounded-lg mb-4 flex items-center gap-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                {success}
+            {tkSuccess && (
+              <div className="mt-3 bg-green-50 border border-green-200 text-green-700 text-sm px-3 py-2 rounded-lg flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
+                {tkSuccess}
               </div>
             )}
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg mb-4">{error}</div>
-            )}
+            {tkError && <div className="mt-3 bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg">{tkError}</div>}
 
-            {/* Create form */}
-            {showCreate && isAdmin && (
-              <div className={`${t.card2} rounded-xl p-4 mb-4 space-y-3`}>
-                <h3 className={`text-sm font-semibold ${t.t2}`}>New Team Member</h3>
+            {showCreateTK && isAdmin && (
+              <div className={`${t.card2} rounded-xl p-4 mt-4 space-y-3`}>
+                <h3 className={`text-sm font-semibold ${t.t2}`}>New TikTok Member</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className={`text-xs ${t.t4} block mb-1`}>Name</label>
-                    <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                      className={`w-full ${t.inp} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400`}
-                      placeholder="Sailini" />
+                    <input value={tkForm.name} onChange={e => setTKForm(f => ({ ...f, name: e.target.value }))}
+                      className={`w-full ${t.inp} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400`} placeholder="Full name" />
                   </div>
                   <div>
                     <label className={`text-xs ${t.t4} block mb-1`}>Email</label>
-                    <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                      type="email"
-                      className={`w-full ${t.inp} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400`}
-                      placeholder="sailini@example.com" />
+                    <input value={tkForm.email} onChange={e => setTKForm(f => ({ ...f, email: e.target.value }))}
+                      type="email" className={`w-full ${t.inp} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400`} placeholder="email@example.com" />
                   </div>
                   <div>
                     <label className={`text-xs ${t.t4} block mb-1`}>Password</label>
-                    <input value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                      type="password"
-                      className={`w-full ${t.inp} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400`}
-                      placeholder="••••••••" />
+                    <input value={tkForm.password} onChange={e => setTKForm(f => ({ ...f, password: e.target.value }))}
+                      type="password" className={`w-full ${t.inp} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400`} placeholder="••••••••" />
                   </div>
                   <div>
                     <label className={`text-xs ${t.t4} block mb-1`}>Store</label>
-                    <select value={form.store_code} onChange={e => setForm(f => ({ ...f, store_code: e.target.value }))}
+                    <select value={tkForm.store_code} onChange={e => setTKForm(f => ({ ...f, store_code: e.target.value }))}
                       className={`w-full ${t.inp} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400`}>
                       <option value="">All stores</option>
                       {STORES.map(s => <option key={s.code} value={s.code}>{s.name} ({s.code})</option>)}
@@ -592,7 +644,7 @@ export default function SettingsPage() {
                   </div>
                   <div>
                     <label className={`text-xs ${t.t4} block mb-1`}>Role</label>
-                    <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
+                    <select value={tkForm.role} onChange={e => setTKForm(f => ({ ...f, role: e.target.value }))}
                       className={`w-full ${t.inp} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400`}>
                       <option value="member">Member</option>
                       <option value="leader">Shop Leader</option>
@@ -602,72 +654,141 @@ export default function SettingsPage() {
                   </div>
                 </div>
                 <div className="flex gap-2 pt-1">
-                  <button onClick={createUser} disabled={saving}
+                  <button onClick={createTKUser} disabled={tkSaving}
                     className={`${t.btn} text-sm px-4 py-2 rounded-lg disabled:opacity-50 font-medium`}>
-                    {saving ? "Creating…" : "Create"}
+                    {tkSaving ? "Creating…" : "Create"}
                   </button>
-                  <button onClick={() => setShowCreate(false)}
-                    className={`text-sm px-4 py-2 rounded-lg ${t.btnAlt}`}>
-                    Cancel
-                  </button>
+                  <button onClick={() => setShowCreateTK(false)} className={`text-sm px-4 py-2 rounded-lg ${t.btnAlt}`}>Cancel</button>
                 </div>
               </div>
             )}
 
-            {/* User list */}
-            <div className={`divide-y ${t.divider}`}>
-              {users.map(u => (
-                <div key={u.id} className="flex items-center gap-3 py-3 group">
-                  <div className={`w-9 h-9 rounded-full ${t.accentSoft} text-sm font-bold flex items-center justify-center shrink-0`}>
-                    {u.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className={`font-medium text-sm ${t.t1} flex items-center gap-2`}>
-                      {u.name}
-                      <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${ROLE_COLORS[u.role] ?? "bg-gray-100 text-gray-600"}`}>
-                        {ROLE_LABELS[u.role] ?? u.role}
-                      </span>
-                    </div>
-                    <div className={`text-xs ${t.t5}`}>
-                      {u.email}
-                      {u.store_code && (
-                        <span className={`ml-2 ${t.t4}`}>· {STORES.find(s => s.code === u.store_code)?.name || u.store_code}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Action buttons */}
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {/* Edit — admin can edit anyone; user can only see their own edit in MyCredentials panel */}
-                    {isAdmin && (
-                      <button
-                        onClick={() => setEditTarget(u)}
-                        className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg font-medium ${t.t3} hover:${t.t1} border ${t.divider} hover:border-violet-400 transition-colors`}
-                        title="Edit credentials"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                        Edit
-                      </button>
-                    )}
-                    {isAdmin && u.id !== currentUser?.id && (
-                      <button
-                        onClick={() => deleteUser(u.id)}
-                        className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg font-medium text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                        title="Remove user"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                </div>
+            <div className={`divide-y ${t.divider} mt-2`}>
+              {tkUsers.map(u => (
+                <UserRow key={u.id} u={u} isAdmin={isAdmin} currentUserId={currentUser?.id}
+                  onEdit={setEditTarget} onDelete={deleteUser} t={t} />
               ))}
             </div>
           </section>
+
+          {/* ── Shein Team ───────────────────────────────────────────────── */}
+          {(isAdmin || currentUser?.store_code === "SHEIN") && (
+            <section className="rounded-xl overflow-hidden" style={{ border: "1.5px solid #fbcfe8" }}>
+              {/* Header banner */}
+              <div className="flex items-center justify-between px-5 py-4 bg-gradient-to-r from-pink-50 to-rose-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-pink-400 to-rose-500 flex items-center justify-center text-white text-lg shadow-sm">
+                    🛍️
+                  </div>
+                  <div>
+                    <div className="font-bold text-pink-900 text-sm flex items-center gap-2">
+                      Shein Team
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-pink-100 text-pink-600 font-normal">{sheinUsers.length} members</span>
+                    </div>
+                    <div className="text-xs text-pink-400 mt-0.5">Inventory · R&amp;R Rate · Product Manager</div>
+                  </div>
+                </div>
+                {isAdmin && (
+                  <button
+                    onClick={() => { setShowCreateShein(v => !v); setSheinError(""); setSheinSuccess(""); }}
+                    className="text-sm px-3 py-1.5 rounded-lg font-medium bg-pink-500 hover:bg-pink-600 text-white transition-colors"
+                  >
+                    + Add Shein Member
+                  </button>
+                )}
+              </div>
+
+              <div className={`px-5 pb-5 ${t.card}`}>
+                {sheinSuccess && (
+                  <div className="mt-4 bg-green-50 border border-green-200 text-green-700 text-sm px-3 py-2 rounded-lg flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
+                    {sheinSuccess}
+                  </div>
+                )}
+                {sheinError && <div className="mt-4 bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg">{sheinError}</div>}
+
+                {/* Add Shein member form */}
+                {showCreateShein && isAdmin && (
+                  <div className="mt-4 rounded-xl p-4 space-y-3" style={{ background: "#fdf2f8", border: "1px solid #fbcfe8" }}>
+                    <div className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-pink-500" />
+                      <h3 className="text-sm font-semibold text-pink-900">New Shein Member</h3>
+                    </div>
+
+                    {/* Access info */}
+                    <div className="flex flex-wrap gap-2">
+                      {["🗂️ Product Manager", "📦 Inventory", "↩️ R&R Rate"].map(label => (
+                        <span key={label} className="text-[11px] px-2.5 py-1 rounded-full bg-pink-100 text-pink-700 font-medium">{label}</span>
+                      ))}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-pink-700 font-medium block mb-1">Name</label>
+                        <input value={sheinForm.name} onChange={e => setSheinForm(f => ({ ...f, name: e.target.value }))}
+                          className={`w-full ${t.inp} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400`} placeholder="Full name" />
+                      </div>
+                      <div>
+                        <label className="text-xs text-pink-700 font-medium block mb-1">Email</label>
+                        <input value={sheinForm.email} onChange={e => setSheinForm(f => ({ ...f, email: e.target.value }))}
+                          type="email" className={`w-full ${t.inp} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400`} placeholder="email@example.com" />
+                      </div>
+                      <div>
+                        <label className="text-xs text-pink-700 font-medium block mb-1">Password</label>
+                        <input value={sheinForm.password} onChange={e => setSheinForm(f => ({ ...f, password: e.target.value }))}
+                          type="password" className={`w-full ${t.inp} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400`} placeholder="••••••••" />
+                      </div>
+                      <div>
+                        <label className="text-xs text-pink-700 font-medium block mb-1">Role</label>
+                        <select value={sheinForm.role} onChange={e => setSheinForm(f => ({ ...f, role: e.target.value }))}
+                          className={`w-full ${t.inp} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400`}>
+                          <option value="member">Member</option>
+                          <option value="leader">Shop Leader</option>
+                          <option value="junior">Junior</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-pink-100">
+                        <span className="w-1.5 h-1.5 rounded-full bg-pink-500" />
+                        <span className="text-xs text-pink-600 font-medium">Store: SHEIN (auto-assigned)</span>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button onClick={createSheinUser} disabled={sheinSaving}
+                        className="bg-pink-500 hover:bg-pink-600 text-white text-sm px-4 py-2 rounded-lg disabled:opacity-50 font-medium transition-colors flex items-center gap-2">
+                        {sheinSaving ? (
+                          <><svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Creating…</>
+                        ) : (
+                          <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>Create Member</>
+                        )}
+                      </button>
+                      <button onClick={() => setShowCreateShein(false)} className={`text-sm px-4 py-2 rounded-lg ${t.btnAlt}`}>Cancel</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Shein member list */}
+                {sheinUsers.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 gap-2 mt-2">
+                    <div className="w-12 h-12 rounded-2xl bg-pink-50 flex items-center justify-center text-2xl">🛍️</div>
+                    <p className="text-sm font-medium text-pink-700">No Shein members yet</p>
+                    <p className="text-xs text-pink-400">Click "+ Add Shein Member" to get started</p>
+                  </div>
+                ) : (
+                  <div className={`divide-y mt-2`} style={{ borderColor: "#fbcfe8" }}>
+                    {sheinUsers.map(u => (
+                      <UserRow key={u.id} u={u} isAdmin={isAdmin} currentUserId={currentUser?.id}
+                        onEdit={setEditTarget} onDelete={deleteUser} t={t} isSheinRow />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
         </div>
       </main>
     </>

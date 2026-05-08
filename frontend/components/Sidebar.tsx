@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { useTheme } from "@/components/ThemeProvider";
 import { THEMES, ThemeKey } from "@/lib/theme";
 
-const STORES = [
+const TK_STORES = [
   { code: "TK1", name: "CELNEPHO" },
   { code: "TK2", name: "CYNLLIO" },
   { code: "TK3", name: "VIMISAOI" },
@@ -19,11 +19,14 @@ const STORE_COLORS: Record<string, string> = {
   TK4: "bg-purple-500",
 };
 
+// Pages Shein members are allowed to access
+const SHEIN_ALLOWED = ["/products", "/inventory", "/rr", "/settings"];
+
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { theme: t, themeKey, setTheme } = useTheme();
-  const [user, setUser] = useState<{ name: string; role: string } | null>(null);
+  const [user, setUser] = useState<{ name: string; role: string; store_code?: string | null } | null>(null);
   const [showThemePicker, setShowThemePicker] = useState(false);
 
   useEffect(() => {
@@ -36,6 +39,9 @@ export default function Sidebar() {
     localStorage.removeItem("user");
     router.push("/login");
   }
+
+  const isShein = user?.store_code === "SHEIN";
+  const isAdmin = user?.role === "admin";
 
   return (
     <aside className={`w-56 shrink-0 flex flex-col min-h-screen ${t.card}`}>
@@ -56,63 +62,108 @@ export default function Sidebar() {
                 d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2" />
             </svg>
           </div>
-          <span className={`font-bold text-sm tracking-tight ${t.t1}`}>WorkFlow</span>
+          <div className="flex-1 min-w-0">
+            <span className={`font-bold text-sm tracking-tight ${t.t1}`}>WorkFlow</span>
+            {isShein && (
+              <div className="flex items-center gap-1 mt-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-pink-500 shrink-0" />
+                <span className="text-[10px] font-semibold text-pink-500 tracking-wide">SHEIN</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-        <NavItem href="/dashboard" active={pathname === "/dashboard"} icon="📊" t={t}>
-          Dashboard
-        </NavItem>
+      {/* ── SHEIN NAV ──────────────────────────────────────────────────────── */}
+      {isShein ? (
+        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+          <div className="pt-1 pb-2 px-2">
+            <div className="flex items-center gap-2 px-2 py-2.5 rounded-xl bg-pink-50 border border-pink-100">
+              <span className="text-base">🛍️</span>
+              <div>
+                <div className="text-xs font-bold text-pink-700">Shein Team</div>
+                <div className="text-[10px] text-pink-400">Member access</div>
+              </div>
+            </div>
+          </div>
 
-        <div className="pt-3 pb-1 px-2">
-          <span className={`text-[10px] font-bold ${t.t5} uppercase tracking-widest`}>Stores</span>
-        </div>
+          <div className="pt-2 pb-1 px-2">
+            <span className={`text-[10px] font-bold ${t.t5} uppercase tracking-widest`}>Tools</span>
+          </div>
 
-        {STORES.map(s => {
-          const active = pathname.startsWith(`/board/${s.code}`);
-          return (
-            <Link
-              key={s.code}
-              href={`/board/${s.code}`}
-              className={`flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm transition-colors ${
-                active ? `${t.bar} ${t.t1} font-medium` : `${t.t3} hover:${t.bar} hover:${t.t2}`
-              }`}
-            >
-              <span className={`w-2 h-2 rounded-full ${STORE_COLORS[s.code]} shrink-0`} />
-              <span className="truncate">{s.name}</span>
-              <span className={`ml-auto text-[10px] ${t.t5}`}>{s.code}</span>
-            </Link>
-          );
-        })}
+          <NavItem href="/products" active={pathname.startsWith("/products")} icon="🗂️" t={t}>
+            Product Manager
+          </NavItem>
+          <NavItem href="/inventory" active={pathname.startsWith("/inventory")} icon="📦" t={t}>
+            Inventory
+          </NavItem>
+          <NavItem href="/rr" active={pathname === "/rr"} icon="↩️" t={t}>
+            R&amp;R Rate
+          </NavItem>
 
-        <div className="pt-3 pb-1 px-2">
-          <span className={`text-[10px] font-bold ${t.t5} uppercase tracking-widest`}>Manage</span>
-        </div>
+          <div className="pt-3 pb-1 px-2">
+            <span className={`text-[10px] font-bold ${t.t5} uppercase tracking-widest`}>Account</span>
+          </div>
+          <NavItem href="/settings" active={pathname === "/settings"} icon="⚙️" t={t}>
+            Settings
+          </NavItem>
+        </nav>
 
-        <NavItem href="/products" active={pathname.startsWith("/products")} icon="🗂️" t={t}>
-          Product Manager
-        </NavItem>
-        <NavItem href="/weeks" active={pathname === "/weeks"} icon="📅" t={t}>
-          Week Setup
-        </NavItem>
-        <NavItem href="/rr" active={pathname === "/rr"} icon="↩️" t={t}>
-          R&amp;R Rate
-        </NavItem>
-        <NavItem href="/pricing" active={pathname === "/pricing"} icon="💰" t={t}>
-          Pricing
-        </NavItem>
-        <NavItem href="/inventory" active={pathname.startsWith("/inventory")} icon="📦" t={t}>
-          Inventory
-        </NavItem>
-        <NavItem href="/ads" active={pathname.startsWith("/ads")} icon="📈" t={t}>
-          Ads Management
-        </NavItem>
-        <NavItem href="/settings" active={pathname === "/settings"} icon="⚙️" t={t}>
-          Settings
-        </NavItem>
-      </nav>
+      ) : (
+      /* ── FULL NAV (admin / TK members) ─────────────────────────────────── */
+        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+          <NavItem href="/dashboard" active={pathname === "/dashboard"} icon="📊" t={t}>
+            Dashboard
+          </NavItem>
+
+          <div className="pt-3 pb-1 px-2">
+            <span className={`text-[10px] font-bold ${t.t5} uppercase tracking-widest`}>Stores</span>
+          </div>
+
+          {TK_STORES.map(s => {
+            const active = pathname.startsWith(`/board/${s.code}`);
+            return (
+              <Link
+                key={s.code}
+                href={`/board/${s.code}`}
+                className={`flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm transition-colors ${
+                  active ? `${t.bar} ${t.t1} font-medium` : `${t.t3} hover:${t.bar} hover:${t.t2}`
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${STORE_COLORS[s.code]} shrink-0`} />
+                <span className="truncate">{s.name}</span>
+                <span className={`ml-auto text-[10px] ${t.t5}`}>{s.code}</span>
+              </Link>
+            );
+          })}
+
+          <div className="pt-3 pb-1 px-2">
+            <span className={`text-[10px] font-bold ${t.t5} uppercase tracking-widest`}>Manage</span>
+          </div>
+
+          <NavItem href="/products" active={pathname.startsWith("/products")} icon="🗂️" t={t}>
+            Product Manager
+          </NavItem>
+          <NavItem href="/weeks" active={pathname === "/weeks"} icon="📅" t={t}>
+            Week Setup
+          </NavItem>
+          <NavItem href="/rr" active={pathname === "/rr"} icon="↩️" t={t}>
+            R&amp;R Rate
+          </NavItem>
+          <NavItem href="/pricing" active={pathname === "/pricing"} icon="💰" t={t}>
+            Pricing
+          </NavItem>
+          <NavItem href="/inventory" active={pathname.startsWith("/inventory")} icon="📦" t={t}>
+            Inventory
+          </NavItem>
+          <NavItem href="/ads" active={pathname.startsWith("/ads")} icon="📈" t={t}>
+            Ads Management
+          </NavItem>
+          <NavItem href="/settings" active={pathname === "/settings"} icon="⚙️" t={t}>
+            Settings
+          </NavItem>
+        </nav>
+      )}
 
       {/* Theme selector */}
       <div className={`px-3 py-2.5 border-t ${t.divider}`}>
@@ -120,7 +171,6 @@ export default function Sidebar() {
           onClick={() => setShowThemePicker(true)}
           className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm w-full transition-all ${t.btnAlt} hover:scale-[1.01]`}
         >
-          {/* Live color dots showing current theme */}
           <div className="flex gap-1 shrink-0">
             {THEMES[themeKey].preview.slice(0,3).map((c, i) => (
               <div key={i} className="w-2.5 h-2.5 rounded-full border border-white/10" style={{ background: c }} />
@@ -137,12 +187,14 @@ export default function Sidebar() {
       {user && (
         <div className={`p-3 border-t ${t.divider}`}>
           <div className="flex items-center gap-2 px-2 py-1.5">
-            <div className={`w-7 h-7 rounded-full ${t.accentBg} flex items-center justify-center text-xs font-bold shrink-0 text-white`}>
+            <div className={`w-7 h-7 rounded-full ${isShein ? "bg-pink-500" : t.accentBg} flex items-center justify-center text-xs font-bold shrink-0 text-white`}>
               {user.name.charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
               <div className={`text-xs font-semibold ${t.t1} truncate`}>{user.name}</div>
-              <div className={`text-[10px] ${t.t4} capitalize`}>{user.role}</div>
+              <div className={`text-[10px] ${t.t4} capitalize`}>
+                {isShein ? "Shein Member" : user.role}
+              </div>
             </div>
             <button
               onClick={logout}
@@ -158,6 +210,7 @@ export default function Sidebar() {
   );
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function NavItem({ href, active, icon, children, t }: {
   href: string; active: boolean; icon: string; children: React.ReactNode; t: import("@/lib/theme").ThemeDef;
 }) {
@@ -224,17 +277,12 @@ function ThemePickerModal({ current, onSelect, onClose }: {
                 onClick={() => onSelect(k)}
                 className="group relative flex flex-col rounded-2xl overflow-hidden transition-all duration-200"
                 style={{
-                  border: active
-                    ? `2px solid ${th.preview[2]}`
-                    : "2px solid rgba(255,255,255,0.08)",
+                  border: active ? `2px solid ${th.preview[2]}` : "2px solid rgba(255,255,255,0.08)",
                   boxShadow: active ? `0 0 20px ${th.preview[2]}33` : "none",
                   transform: active ? "scale(1.02)" : undefined,
                 }}
               >
-                {/* Preview area */}
                 <div className="h-36 relative overflow-hidden" style={{ background: th.preview[0] }}>
-
-                  {/* Fake sidebar strip */}
                   <div className="absolute top-0 left-0 bottom-0 w-8"
                     style={{ background: th.preview[1], borderRight: `1px solid ${isLight ? "#e2e8f0" : "rgba(255,255,255,0.06)"}` }}>
                     <div className="mt-2.5 mx-1 space-y-1">
@@ -243,17 +291,12 @@ function ThemePickerModal({ current, onSelect, onClose }: {
                       ))}
                     </div>
                   </div>
-
-                  {/* Main content area */}
                   <div className="absolute top-0 left-8 right-0 bottom-0 p-2">
-                    {/* Topbar */}
                     <div className="h-4 rounded mb-1.5 flex items-center px-1.5 gap-1"
                       style={{ background: th.preview[1], border: `1px solid ${isLight ? "#e2e8f0" : "rgba(255,255,255,0.06)"}` }}>
                       <div className="h-1 rounded flex-1" style={{ background: isLight ? "#94a3b8" : "rgba(255,255,255,0.2)" }}/>
                       <div className="h-2 w-4 rounded" style={{ background: th.preview[2], opacity: 0.8 }}/>
                     </div>
-
-                    {/* Cards row */}
                     <div className="flex gap-1 mb-1">
                       {[0.9, 0.6, 0.4].map((op, i) => (
                         <div key={i} className="flex-1 h-7 rounded-lg p-1"
@@ -263,8 +306,6 @@ function ThemePickerModal({ current, onSelect, onClose }: {
                         </div>
                       ))}
                     </div>
-
-                    {/* Table rows */}
                     <div className="rounded-lg overflow-hidden"
                       style={{ background: th.preview[1], border: `1px solid ${isLight ? "#e2e8f0" : "rgba(255,255,255,0.06)"}` }}>
                       {[1, 0.5, 0.5].map((op, i) => (
@@ -276,33 +317,24 @@ function ThemePickerModal({ current, onSelect, onClose }: {
                       ))}
                     </div>
                   </div>
-
-                  {/* Checkmark */}
                   {active && (
                     <div className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center"
                       style={{ background: th.preview[2] }}>
-                      <svg className="w-3 h-3 text-white" fill="none" stroke={isLight && th.preview[2] === "#4f46e5" ? "white" : "white"} viewBox="0 0 24 24">
+                      <svg className="w-3 h-3 text-white" fill="none" stroke="white" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/>
                       </svg>
                     </div>
                   )}
                 </div>
-
-                {/* Label area */}
                 <div className="px-3 py-3" style={{
                   background: th.preview[1],
                   borderTop: `1px solid ${isLight ? "#e2e8f0" : "rgba(255,255,255,0.06)"}`,
                 }}>
                   <div className="flex items-center gap-1.5 mb-1">
                     <span className="text-sm">{emoji}</span>
-                    <span className="font-bold text-xs" style={{ color: isLight ? "#0f172a" : "#f8fafc" }}>
-                      {th.name}
-                    </span>
+                    <span className="font-bold text-xs" style={{ color: isLight ? "#0f172a" : "#f8fafc" }}>{th.name}</span>
                   </div>
-                  <p className="text-[10px] leading-tight" style={{ color: isLight ? "#64748b" : "#71717a" }}>
-                    {th.desc}
-                  </p>
-                  {/* Color swatches */}
+                  <p className="text-[10px] leading-tight" style={{ color: isLight ? "#64748b" : "#71717a" }}>{th.desc}</p>
                   <div className="flex gap-1 mt-2">
                     {th.preview.slice(0, 4).map((c, i) => (
                       <div key={i} className="w-3 h-3 rounded-full"
@@ -315,7 +347,6 @@ function ThemePickerModal({ current, onSelect, onClose }: {
           })}
         </div>
 
-        {/* Footer */}
         <div className="px-6 pb-5 flex items-center justify-between">
           <p className="text-slate-600 text-[10px]">Saved automatically · applies instantly</p>
           <button
