@@ -518,7 +518,7 @@ def _product_in_store(stores_available: str | None, store_code: str) -> bool:
     if not stores_available:
         return True
     s = stores_available.upper()
-    if "ALL" in s:
+    if "ALL" in s or s == "MANUAL":
         return True
     num = store_code[-1]  # "1" from "TK1"
     return f"TK {num}" in s or f"TK{num}" in s
