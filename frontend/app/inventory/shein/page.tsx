@@ -3,7 +3,8 @@ import { useState, useRef, useEffect } from "react";
 import { useTheme } from "@/components/ThemeProvider";
 
 function backendUrl(path: string) {
-  const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
+  const h = typeof window !== "undefined" ? window.location.hostname : "localhost";
+  const host = (h === "localhost" || /^127\./.test(h) || /^192\.168\./.test(h) || /^10\./.test(h)) ? h : "localhost";
   return `http://${host}:8000${path}`;
 }
 

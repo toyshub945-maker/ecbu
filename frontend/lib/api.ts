@@ -1,9 +1,14 @@
+function resolveBackendHost(): string {
+  if (typeof window === "undefined") return "localhost";
+  const h = window.location.hostname;
+  // Use actual host only for localhost / LAN IPs; any external domain → localhost
+  return (h === "localhost" || /^127\./.test(h) || /^192\.168\./.test(h) || /^10\./.test(h)) ? h : "localhost";
+}
+
 const BASE =
   process.env.NEXT_PUBLIC_BACKEND_URL
     ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/api`
-    : typeof window !== "undefined"
-      ? `${window.location.protocol}//${window.location.hostname}:8000/api`
-      : "http://localhost:8000/api";
+    : `http://${resolveBackendHost()}:8000/api`;
 
 function getToken(): string | null {
   if (typeof window === "undefined") return null;

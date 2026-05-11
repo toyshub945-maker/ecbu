@@ -6,7 +6,10 @@ import type { ThemeDef } from "@/lib/theme";
 import { api } from "@/lib/api";
 
 function backendUrl(path: string) {
-  const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
+  if (typeof window === "undefined") return `http://localhost:8000${path}`;
+  const h = window.location.hostname;
+  // Use the actual host only for localhost or LAN IPs; Vercel/external → always localhost
+  const host = (h === "localhost" || /^127\./.test(h) || /^192\.168\./.test(h) || /^10\./.test(h)) ? h : "localhost";
   return `http://${host}:8000${path}`;
 }
 

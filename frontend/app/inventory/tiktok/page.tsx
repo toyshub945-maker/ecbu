@@ -6,7 +6,8 @@ function backendUrl(path: string) {
   if (process.env.NEXT_PUBLIC_BACKEND_URL) {
     return `${process.env.NEXT_PUBLIC_BACKEND_URL}${path}`;
   }
-  const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
+  const h = typeof window !== "undefined" ? window.location.hostname : "localhost";
+  const host = (h === "localhost" || /^127\./.test(h) || /^192\.168\./.test(h) || /^10\./.test(h)) ? h : "localhost";
   return `http://${host}:8000${path}`;
 }
 
