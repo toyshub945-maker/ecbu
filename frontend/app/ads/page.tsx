@@ -768,6 +768,8 @@ function AdsCreativeTab() {
   const [success, setSuccess] = useState("");
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
   const [actionFilter, setActionFilter] = useState<"budget"|"excluded"|"auth"|null>(null);
+  const [productSearch, setProductSearch] = useState("");
+  const [authOrdersOnly, setAuthOrdersOnly] = useState(false);
 
   const dark = themeKey !== "light";
 
@@ -785,12 +787,12 @@ function AdsCreativeTab() {
     try {
       const d = await api.creativeProducts(store, selectedUploadId);
       setProducts(d.products);
-      setExpandedProducts(new Set(d.products.map((p: CreativeProduct) => p.product_no)));
+      setExpandedProducts(new Set()); // start collapsed
     } catch { setProducts([]); }
     finally { setLoading(false); }
   }, [store, selectedUploadId]);
 
-  useEffect(() => { setSelectedUploadId(null); setActionFilter(null); loadUploads(); }, [store]);
+  useEffect(() => { setSelectedUploadId(null); setActionFilter(null); setProductSearch(""); setAuthOrdersOnly(false); loadUploads(); }, [store]);
   useEffect(() => { loadProducts(); }, [loadProducts]);
 
   const handleUpload = async () => {
@@ -839,12 +841,42 @@ function AdsCreativeTab() {
   type FlatEntry = CreativeEntry & { product_no: string; warehouse_name: string | null; image_url: string | null };
   const flatFilteredEntries: FlatEntry[] = actionFilter === null ? [] : products.flatMap(p =>
     [...p.videos, ...p.product_cards]
-      .filter(e => getCreativeBadge(e)?.type === actionFilter)
+      .filter(e => {
+        if (getCreativeBadge(e)?.type !== actionFilter) return false;
+        if (actionFilter === "auth" && authOrdersOnly && e.sku_orders === 0) return false;
+        return true;
+      })
       .map(e => ({ ...e, product_no: p.product_no, warehouse_name: p.warehouse_name, image_url: p.image_url }))
   );
 
-  // Product filter (for grouped view when no filter)
-  const filteredProducts = products;
+  // Export auth entries as CSV
+  const exportAuthCSV = () => {
+    const rows = flatFilteredEntries;
+    if (rows.length === 0) return;
+    const headers = ["Product #","Warehouse","Video ID","Creator","Video Title","Cost","Orders","Cost/Order","Revenue","ROI","CTR","Status"];
+    const lines = rows.map(e => [
+      e.product_no, e.warehouse_name || "", e.video_id || "", e.tiktok_account || "",
+      `"${(e.video_title || "").replace(/"/g, '""')}"`,
+      e.cost.toFixed(2), e.sku_orders, e.cost_per_order > 0 ? e.cost_per_order.toFixed(2) : "",
+      e.gross_revenue.toFixed(2), e.roi > 0 ? e.roi.toFixed(1) : "",
+      e.click_rate != null ? (e.click_rate * 100).toFixed(1) + "%" : "", e.status || ""
+    ].join(","));
+    const csv = [headers.join(","), ...lines].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `auth_needed_${store}_${authOrdersOnly ? "with_orders_" : ""}${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Product filter (for grouped view when no filter) — search by product # or name
+  const filteredProducts = products.filter(p => {
+    if (!productSearch.trim()) return true;
+    const q = productSearch.toLowerCase();
+    return p.product_no.toLowerCase().includes(q) || (p.warehouse_name || "").toLowerCase().includes(q);
+  });
 
   const totalVideos = products.reduce((a, p) => a + p.videos.length, 0);
   const totalCards  = products.reduce((a, p) => a + p.product_cards.length, 0);
@@ -983,7 +1015,7 @@ function AdsCreativeTab() {
       {/* ── Flat filtered view (individual creatives) ── */}
       {actionFilter !== null && (
         <div className={`${t.card} border ${t.divider} rounded-xl overflow-hidden mb-3`}>
-          <div className={`flex items-center gap-3 px-4 py-3 border-b ${t.divider} ${dark ? "bg-white/5" : "bg-gray-50"}`}>
+          <div className={`flex items-center gap-3 px-4 py-3 border-b ${t.divider} ${dark ? "bg-white/5" : "bg-gray-50"} flex-wrap`}>
             <span className={`text-xs font-bold uppercase tracking-wider ${t.t2}`}>
               {actionFilter === "budget"   ? "💰 Add Budget" :
                actionFilter === "excluded" ? "🚫 Needs Exclusion" : "🔑 Authorization Needed"}
@@ -992,7 +1024,28 @@ function AdsCreativeTab() {
               actionFilter === "budget"   ? "bg-green-100 text-green-700" :
               actionFilter === "excluded" ? "bg-red-100 text-red-700"     : "bg-amber-100 text-amber-700"
             }`}>{flatFilteredEntries.length} creatives</span>
-            <button onClick={() => setActionFilter(null)} className={`ml-auto text-xs ${t.t4} hover:${t.t2}`}>← Back to all</button>
+
+            {/* Auth-only: orders filter + export */}
+            {actionFilter === "auth" && (
+              <div className="flex items-center gap-2 ml-2">
+                <button
+                  onClick={() => setAuthOrdersOnly(v => !v)}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-semibold border transition-all ${
+                    authOrdersOnly
+                      ? "bg-amber-100 border-amber-400 text-amber-800"
+                      : `${t.bar} ${t.divider} ${t.t3} hover:border-amber-300`
+                  }`}>
+                  🛒 {authOrdersOnly ? "With Orders Only ✓" : "With Orders Only"}
+                </button>
+                <button
+                  onClick={exportAuthCSV}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-semibold bg-amber-600 text-white hover:bg-amber-700 transition-all">
+                  📥 Export CSV
+                </button>
+              </div>
+            )}
+
+            <button onClick={() => { setActionFilter(null); setAuthOrdersOnly(false); }} className={`ml-auto text-xs ${t.t4} hover:${t.t2}`}>← Back to all</button>
           </div>
           {flatFilteredEntries.length === 0 ? (
             <div className={`text-center py-10 text-sm ${t.t4}`}>No creatives match</div>
@@ -1059,6 +1112,30 @@ function AdsCreativeTab() {
                 </tbody>
               </table>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Product search bar (shown when no filter active) ── */}
+      {actionFilter === null && products.length > 0 && (
+        <div className="mb-3 flex items-center gap-2">
+          <div className={`flex-1 flex items-center gap-2 px-3 py-2 ${t.card} border ${t.divider} rounded-xl`}>
+            <svg className={`w-4 h-4 ${t.t4} shrink-0`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0"/>
+            </svg>
+            <input
+              type="text"
+              placeholder="Search by product # or name…"
+              value={productSearch}
+              onChange={e => setProductSearch(e.target.value)}
+              className={`flex-1 bg-transparent text-sm outline-none ${t.t1} placeholder:${t.t4}`}
+            />
+            {productSearch && (
+              <button onClick={() => setProductSearch("")} className={`${t.t4} hover:${t.t2} text-xs`}>✕</button>
+            )}
+          </div>
+          {productSearch && (
+            <span className={`text-xs ${t.t4} shrink-0`}>{filteredProducts.length} of {products.length}</span>
           )}
         </div>
       )}
