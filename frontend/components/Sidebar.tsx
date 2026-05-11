@@ -71,27 +71,6 @@ export default function Sidebar() {
         )}
       </div>
 
-      {/* WorkFlow branding */}
-      <div className={`px-4 pt-3 pb-3 border-b ${t.divider}`}>
-        <div className="flex items-center gap-2.5">
-          <div className={`w-7 h-7 rounded-lg ${t.accentBg} flex items-center justify-center shrink-0`}>
-            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2" />
-            </svg>
-          </div>
-          <div className="flex-1 min-w-0">
-            <span className={`font-bold text-sm tracking-tight ${t.t1}`}>WorkFlow</span>
-            {isShein && (
-              <div className="flex items-center gap-1 mt-0.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-pink-500 shrink-0" />
-                <span className="text-[10px] font-semibold text-pink-500 tracking-wide">SHEIN</span>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
       {/* ── SHEIN NAV ──────────────────────────────────────────────────────── */}
       {isShein ? (
         <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
@@ -130,10 +109,13 @@ export default function Sidebar() {
       ) : (
       /* ── FULL NAV (admin / TK members) ─────────────────────────────────── */
         <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+
+          {/* WorkFlow — plain section title */}
           <div className="pt-1 pb-1 px-2">
-            <span className={`text-[10px] font-bold ${t.t5} uppercase tracking-widest`}>Stores</span>
+            <span className={`text-[10px] font-bold ${t.t5} uppercase tracking-widest`}>WorkFlow</span>
           </div>
 
+          {/* Stores listed directly under WorkFlow */}
           {TK_STORES.map(s => {
             const active = pathname.startsWith(`/board/${s.code}`);
             return (
