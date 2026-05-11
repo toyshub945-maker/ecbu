@@ -44,7 +44,7 @@ export default function Sidebar() {
   const isAdmin = user?.role === "admin";
 
   return (
-    <aside className={`w-56 shrink-0 flex flex-col min-h-screen ${t.card}`}>
+    <aside className={`w-56 shrink-0 flex flex-col h-full ${t.card}`}>
       {showThemePicker && (
         <ThemePickerModal
           current={themeKey}
@@ -54,7 +54,11 @@ export default function Sidebar() {
       )}
 
       {/* Logo */}
-      <div className={`px-4 py-5 border-b ${t.divider}`}>
+      <div className={`px-4 pt-4 pb-3 border-b ${t.divider}`}>
+        {/* Department header */}
+        <div className={`text-[9px] font-bold uppercase tracking-widest ${t.t4} mb-2.5 leading-tight`}>
+          E-Commerce BU Department
+        </div>
         <div className="flex items-center gap-2.5">
           <div className={`w-7 h-7 rounded-lg ${t.accentBg} flex items-center justify-center shrink-0`}>
             <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
