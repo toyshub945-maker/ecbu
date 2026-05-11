@@ -54,7 +54,7 @@ export default function Sidebar() {
       )}
 
       {/* Department label + Dashboard */}
-      <div className={`px-4 pt-4 pb-2 border-b ${t.divider}`}>
+      <div className={`px-4 pt-8 pb-2 border-b ${t.divider}`}>
         <div className={`text-[9px] font-bold uppercase tracking-widest ${t.t4} mb-2 leading-tight`}>
           E-Commerce BU Department
         </div>
