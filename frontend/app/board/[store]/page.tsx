@@ -1710,16 +1710,14 @@ function DataUploadPanel({
   storeCode: string; onImported: () => void;
 }) {
   const { theme: t } = useTheme();
-  const [activeTab, setActiveTab] = useState<"analytics" | "orders" | "tiktok">("analytics");
+  const [activeTab, setActiveTab] = useState<"analytics" | "orders">("analytics");
   const [analyticsFile, setAnalyticsFile] = useState<File | null>(null);
   const [ordersFile, setOrdersFile] = useState<File | null>(null);
-  const [tiktokFile, setTiktokFile] = useState<File | null>(null);
   const [ordersType, setOrdersType] = useState("orders");
   const [periodLabel, setPeriodLabel] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [msg, setMsg] = useState("");
   const [history, setHistory] = useState<{ id: number; filename: string; upload_type: string; period_label: string | null; row_count: number; imported_at: string }[]>([]);
-  const [tkPeriods, setTkPeriods] = useState<{ period_start: string; period_end: string; product_count: number; total_gmv: number; imported_at: string }[]>([]);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -1730,17 +1728,7 @@ function DataUploadPanel({
     }
   }, [storeCode]);
 
-  const loadTkPeriods = useCallback(async () => {
-    try {
-      const r = await api.getTiktokExportList(storeCode);
-      setTkPeriods(r.periods);
-    } catch {
-      setTkPeriods([]);
-    }
-  }, [storeCode]);
-
   useEffect(() => { loadHistory(); }, [loadHistory]);
-  useEffect(() => { if (activeTab === "tiktok") loadTkPeriods(); }, [activeTab, loadTkPeriods]);
 
   async function uploadAnalytics() {
     if (!analyticsFile) return;
@@ -1749,21 +1737,6 @@ function DataUploadPanel({
       const r = await api.importAnalytics(analyticsFile, storeCode);
       setMsg(`✓ Imported ${r.imported} products across ${r.periods_created} new period(s).`);
       setStatus("done");
-      onImported();
-    } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Upload failed");
-      setStatus("error");
-    }
-  }
-
-  async function uploadTiktok() {
-    if (!tiktokFile) return;
-    setStatus("loading"); setMsg("");
-    try {
-      const r = await api.importTiktokExport(tiktokFile, storeCode);
-      setMsg(`✓ Imported ${r.imported} products (${r.unmatched} unmatched) for ${r.period_start} → ${r.period_end}`);
-      setStatus("done");
-      loadTkPeriods();
       onImported();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Upload failed");
@@ -1788,10 +1761,10 @@ function DataUploadPanel({
   return (
     <div className={`${t.card} rounded-xl overflow-hidden`}>
       <div className={`flex border-b ${t.divider}`}>
-        {(["analytics", "orders", "tiktok"] as const).map(tb => (
+        {(["analytics", "orders"] as const).map(tb => (
           <button key={tb} onClick={() => { setActiveTab(tb); setStatus("idle"); setMsg(""); }}
             className={`px-5 py-3 text-sm font-medium transition-colors ${activeTab === tb ? `text-violet-600 border-b-2 border-violet-600 ${t.accentSoft}` : `${t.t3} hover:${t.bar}`}`}>
-            {tb === "analytics" ? "📊 Analytics / Work Flow Excel" : tb === "orders" ? "📦 Orders Sheet" : "📈 TikTok Analytics"}
+            {tb === "analytics" ? "📊 Analytics / Work Flow Excel" : "📦 Orders Sheet"}
           </button>
         ))}
       </div>
@@ -1810,50 +1783,6 @@ function DataUploadPanel({
               className="bg-violet-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-violet-700 disabled:opacity-50 font-medium">
               {status === "loading" ? "Importing…" : "Import Excel"}
             </button>
-          </>
-        ) : activeTab === "tiktok" ? (
-          <>
-            <p className={`text-sm ${t.t3} mb-4`}>
-              Upload a TikTok product analytics export file (<strong>product_list_All_*.xlsx</strong>). Products are matched by TikTok Product ID and metrics are available on each product card.
-            </p>
-            <input type="file" accept=".xlsx,.xls"
-              onChange={e => { setTiktokFile(e.target.files?.[0] ?? null); setStatus("idle"); setMsg(""); }}
-              className={`w-full text-sm ${t.t3} file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border ${t.divider} file:text-sm file:font-medium ${t.inp} mb-3`} />
-            {msg && <p className={`text-sm px-3 py-2 rounded-lg mb-3 ${status === "done" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>{msg}</p>}
-            <button onClick={uploadTiktok} disabled={!tiktokFile || status === "loading"}
-              className="bg-violet-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-violet-700 disabled:opacity-50 font-medium">
-              {status === "loading" ? "Importing…" : "Import Analytics"}
-            </button>
-
-            {tkPeriods.length > 0 && (
-              <div className="mt-5">
-                <h4 className={`text-xs font-semibold ${t.t4} uppercase mb-2`}>Imported Periods</h4>
-                <div className="space-y-1.5">
-                  {tkPeriods.map((p, i) => (
-                    <div key={i} className="flex items-center gap-3 text-xs bg-sky-50 rounded-lg px-3 py-2 group hover:bg-sky-100 transition-colors">
-                      <span className="font-medium text-sky-700">{p.period_start} → {p.period_end}</span>
-                      <span className="text-sky-500 ml-auto">{p.product_count} products</span>
-                      <span className="text-sky-400">${p.total_gmv.toLocaleString(undefined, { maximumFractionDigits: 0 })} GMV</span>
-                      <span className={`${t.t4}`}>{new Date(p.imported_at).toLocaleDateString()}</span>
-                      <button 
-                        onClick={async () => {
-                          if (confirm(`Delete analytics for ${p.period_start} → ${p.period_end}?`)) {
-                            try { 
-                              await api.deleteTiktokExport(storeCode, p.period_start, p.period_end); 
-                              loadTkPeriods(); 
-                            } catch (e: any) { alert(`Failed to delete: ${e.message}`); }
-                          }
-                        }} 
-                        title="Delete this upload"
-                        className="text-red-400 hover:text-red-600 ml-2 p-1 rounded shrink-0 hover:bg-red-50 transition-colors"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </>
         ) : (
           <>
