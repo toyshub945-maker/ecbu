@@ -782,7 +782,7 @@ export default function ProductManagerPage() {
         <UploadPanel onClose={()=>setShowUpload(false)} onUploaded={()=>{load();setShowUpload(false);}} t={t} />
       )}
 
-      <div className={`flex-1 flex flex-col min-w-0 ${t.page}`}>
+      <div className={`flex-1 flex flex-col min-w-0 min-h-0 ${t.page}`}>
         <div className={`px-6 py-3.5 border-b ${t.divider} ${t.card} shrink-0 flex items-center justify-between gap-4`}>
           <div>
             <h1 className={`text-base font-black ${t.t1} tracking-tight`}>🗂️ Product Manager</h1>
