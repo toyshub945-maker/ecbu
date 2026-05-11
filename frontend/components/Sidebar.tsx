@@ -116,11 +116,7 @@ export default function Sidebar() {
       ) : (
       /* ── FULL NAV (admin / TK members) ─────────────────────────────────── */
         <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-          <NavItem href="/dashboard" active={pathname === "/dashboard"} icon="📊" t={t}>
-            Dashboard
-          </NavItem>
-
-          <div className="pt-3 pb-1 px-2">
+          <div className="pt-1 pb-1 px-2">
             <span className={`text-[10px] font-bold ${t.t5} uppercase tracking-widest`}>Stores</span>
           </div>
 
@@ -144,6 +140,10 @@ export default function Sidebar() {
           <div className="pt-3 pb-1 px-2">
             <span className={`text-[10px] font-bold ${t.t5} uppercase tracking-widest`}>Manage</span>
           </div>
+
+          <NavItem href="/dashboard" active={pathname === "/dashboard"} icon="📊" t={t}>
+            Dashboard
+          </NavItem>
 
           <NavItem href="/products" active={pathname.startsWith("/products")} icon="🗂️" t={t}>
             Product Manager

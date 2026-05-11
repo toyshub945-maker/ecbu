@@ -2738,6 +2738,11 @@ def _pm_perf(orders: int) -> str:
     if orders >= 50:  return "growing"
     return "low"
 
+def _pm_perf_with_data(orders: int, has_data: bool) -> str:
+    """Returns 'none' when no analytics data has been uploaded for this product."""
+    if not has_data: return "none"
+    return _pm_perf(orders)
+
 def _pm_calc_profit(cost_rmb: float, price_usd: float):
     if not price_usd or price_usd <= 0: return None, None
     EXCHANGE_RATE = 7.0; FIRST_MILE = 1.5; LAST_MILE = 9.5
@@ -2803,53 +2808,17 @@ def pm_list_products(q: str = "", _: dict = Depends(auth.get_current_user)):
         """, pnos)
         stock_map = {r["product_no"]: r["total_stock"] or 0 for r in cur.fetchall()}
 
-        # R&R
-        cur.execute("SELECT store_code, msku, SUM(order_qty) AS t FROM rr_order_items GROUP BY store_code, msku")
-        ord_rows = cur.fetchall()
-        cur.execute("SELECT store_code, msku, SUM(return_qty) AS t FROM rr_return_items GROUP BY store_code, msku")
-        ret_rows = cur.fetchall()
-        cur.execute("SELECT product_no, sku, tk1_seller_sku, tk2_seller_sku, tk3_seller_sku, tk4_seller_sku FROM products")
-        all_prods = [dict(r) for r in cur.fetchall()]
-
-    emap: dict = {}
-    for p in all_prods:
-        for key in [p["sku"], p["product_no"]]:
-            if key: emap[str(key).strip().upper()] = p["product_no"]
-        for sk_field in [p["tk1_seller_sku"], p["tk2_seller_sku"], p["tk3_seller_sku"], p["tk4_seller_sku"]]:
-            if sk_field:
-                for sk in str(sk_field).split(","):
-                    sk = sk.strip()
-                    if sk: emap[sk.upper()] = p["product_no"]
-
-    def _resolve(msku):
-        ku = msku.upper()
-        if ku in emap: return emap[ku]
-        for prefix, pno in emap.items():
-            if ku.startswith(prefix + "-") or ku.startswith(prefix + "_"):
-                return pno
-        return None
-
-    rr_orders: dict = {}
-    rr_returns: dict = {}
-    for r in ord_rows:
-        pno = _resolve(r["msku"])
-        if pno: rr_orders[pno] = rr_orders.get(pno, 0) + (r["t"] or 0)
-    for r in ret_rows:
-        pno = _resolve(r["msku"])
-        if pno: rr_returns[pno] = rr_returns.get(pno, 0) + (r["t"] or 0)
-
+    # R&R is loaded per-product in detail view — skip full table scan here
     results = []
     for p in products:
         pno = p["product_no"]
+        has_data = pno in orders_map
         od = orders_map.get(pno, {})
         orders = od.get("orders", 0)
-        o = rr_orders.get(pno, 0)
-        rt = rr_returns.get(pno, 0)
-        rr_rate = round(rt / o * 100, 1) if o > 0 else None
         results.append({**p,
             "total_orders": orders, "total_gmv": od.get("gmv", 0),
             "latest_period": od.get("period"), "total_stock": stock_map.get(pno, 0),
-            "rr_rate": rr_rate, "performance": _pm_perf(orders)})
+            "rr_rate": None, "performance": _pm_perf_with_data(orders, has_data)})
 
     return {"products": results}
 
@@ -3017,12 +2986,13 @@ def pm_product_detail(product_no: str, _: dict = Depends(auth.get_current_user))
         overall_rr = round(total_r / total_o * 100, 1) if total_o > 0 else None
 
     latest_orders = monthly[-1]["orders"] if monthly else 0
+    has_data = len(monthly) > 0
     return {
         "product": {k: prod[k] for k in ["product_no","warehouse_name","image_url","sku","status","cost","stores_available"]},
         "monthly": monthly,
         "stock": {"total": total_stock, "groups": list(stock_groups.values())},
         "pricing": pricing,
         "rr": {"overall": overall_rr, "by_store": rr_by_store},
-        "performance": _pm_perf(latest_orders),
+        "performance": _pm_perf_with_data(latest_orders, has_data),
         "latest_orders": latest_orders,
     }

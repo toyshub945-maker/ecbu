@@ -19,6 +19,7 @@ const PERF: Record<PerfTier,{ label:string; icon:string; color:string; bg:string
   mid:     { label:"Mid",     icon:"📈", color:"text-blue-700",    bg:"bg-blue-50",     ring:"ring-blue-200",    bar:"bg-blue-500",    headerBg:"from-blue-50 via-white to-white",    dot:"bg-blue-500"    },
   growing: { label:"Growing", icon:"🌱", color:"text-amber-700",   bg:"bg-amber-50",    ring:"ring-amber-200",   bar:"bg-amber-500",   headerBg:"from-amber-50 via-white to-white",   dot:"bg-amber-500"   },
   low:     { label:"Low",     icon:"❄️", color:"text-gray-600",    bg:"bg-gray-100",    ring:"ring-gray-300",    bar:"bg-gray-400",    headerBg:"from-gray-50 via-white to-white",    dot:"bg-gray-400"    },
+  none:    { label:"No Data", icon:"—",  color:"text-slate-400",   bg:"bg-slate-50",    ring:"ring-slate-200",   bar:"bg-slate-300",   headerBg:"from-slate-50 via-white to-white",   dot:"bg-slate-300"   },
 };
 
 function fmt(n: number | null | undefined, dec = 0) {
@@ -738,6 +739,11 @@ function ProductItem({ p, active, onClick, t }: { p: PMProduct; active: boolean;
   );
 }
 
+// ─── Module-level cache (survives tab navigation, cleared on upload) ──────────
+let _pmCache: PMProduct[] | null = null;
+let _pmCacheTime = 0;
+const PM_CACHE_TTL = 60_000; // 60 seconds
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 const PERF_FILTERS: {key:PerfTier|"all"; label:string}[] = [
   {key:"all",     label:"All"},
@@ -745,6 +751,7 @@ const PERF_FILTERS: {key:PerfTier|"all"; label:string}[] = [
   {key:"mid",     label:"📈 Mid"},
   {key:"growing", label:"🌱 Growing"},
   {key:"low",     label:"❄️ Low"},
+  {key:"none",    label:"— No Data"},
 ];
 
 export default function ProductManagerPage() {
@@ -757,9 +764,19 @@ export default function ProductManagerPage() {
   const [selectedNo, setSelected]   = useState<string|null>(null);
   const [showUpload, setShowUpload] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (skipCache = false) => {
+    // Serve cached list instantly on repeat visits (no search active)
+    if (!search && !skipCache && _pmCache && Date.now() - _pmCacheTime < PM_CACHE_TTL) {
+      setProducts(_pmCache);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    try { const r = await api.pmProducts(search||undefined); setProducts(r.products); }
+    try {
+      const r = await api.pmProducts(search || undefined);
+      setProducts(r.products);
+      if (!search) { _pmCache = r.products; _pmCacheTime = Date.now(); }
+    }
     catch(e) { console.error(e); } finally { setLoading(false); }
   }, [search]);
 
@@ -771,6 +788,7 @@ export default function ProductManagerPage() {
     mid:     products.filter(p=>p.performance==="mid").length,
     growing: products.filter(p=>p.performance==="growing").length,
     low:     products.filter(p=>p.performance==="low").length,
+    none:    products.filter(p=>p.performance==="none").length,
   };
   const filtered = perfFilter==="all" ? products : products.filter(p=>p.performance===perfFilter);
 
@@ -779,7 +797,7 @@ export default function ProductManagerPage() {
       <Sidebar />
 
       {showUpload && (
-        <UploadPanel onClose={()=>setShowUpload(false)} onUploaded={()=>{load();setShowUpload(false);}} t={t} />
+        <UploadPanel onClose={()=>setShowUpload(false)} onUploaded={()=>{ _pmCache=null; load(true); setShowUpload(false); }} t={t} />
       )}
 
       <div className={`flex-1 flex flex-col min-w-0 min-h-0 ${t.page}`}>
@@ -792,14 +810,21 @@ export default function ProductManagerPage() {
             <div className={`flex items-center gap-2 ${themeKey !== "light" ? "bg-slate-800 border-slate-700" : "bg-gray-50 border-gray-200"} rounded-xl px-3 py-1.5 border`}>
               <span className={`text-[10px] ${t.t4}`}>{products.length} products</span>
               <span className={t.t4}>·</span>
-              {[
-                {label:"High",    count:counts.high,    color:"text-emerald-600"},
-                {label:"Mid",     count:counts.mid,     color:"text-blue-600"},
-                {label:"Growing", count:counts.growing, color:"text-amber-600"},
-                {label:"Low",     count:counts.low,     color:t.t4},
-              ].map(k => (
-                <span key={k.label} className={`text-[10px] font-bold ${k.color}`}>{k.count} {k.label}</span>
-              ))}
+              {counts.none === products.length && products.length > 0 ? (
+                <span className={`text-[10px] font-bold text-slate-400`}>No analytics data — upload to classify</span>
+              ) : (
+                <>
+                  {[
+                    {label:"High",    count:counts.high,    color:"text-emerald-600"},
+                    {label:"Mid",     count:counts.mid,     color:"text-blue-600"},
+                    {label:"Growing", count:counts.growing, color:"text-amber-600"},
+                    {label:"Low",     count:counts.low,     color:t.t4},
+                  ].map(k => (
+                    <span key={k.label} className={`text-[10px] font-bold ${k.color}`}>{k.count} {k.label}</span>
+                  ))}
+                  {counts.none > 0 && <span className={`text-[10px] font-bold text-slate-400`}>{counts.none} No Data</span>}
+                </>
+              )}
             </div>
             <button onClick={()=>setShowUpload(true)}
               className="flex items-center gap-1.5 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm">
@@ -825,16 +850,21 @@ export default function ProductManagerPage() {
 
             <div className={`px-3 py-2 border-b ${t.divider} shrink-0`}>
               <div className="flex flex-wrap gap-1">
-                {PERF_FILTERS.map(f => (
-                  <button key={f.key} onClick={()=>setPerf(f.key)}
-                    className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-all border ${
-                      perfFilter===f.key
-                        ? "bg-violet-600 text-white border-violet-600 shadow-sm"
-                        : `${t.card} ${t.t3} border ${t.divider} hover:border-violet-300 hover:text-violet-600`
-                    }`}>
-                    {f.label} {f.key!=="all" && counts[f.key as PerfTier] !== undefined ? `(${counts[f.key as PerfTier]})` : ""}
-                  </button>
-                ))}
+                {PERF_FILTERS.map(f => {
+                  const cnt = f.key !== "all" ? counts[f.key as PerfTier] : undefined;
+                  // Hide tier filter buttons that have 0 products (except "all" and "none" when all are none)
+                  if (f.key !== "all" && f.key !== "none" && cnt === 0 && counts.none === products.length) return null;
+                  return (
+                    <button key={f.key} onClick={()=>setPerf(f.key)}
+                      className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-all border ${
+                        perfFilter===f.key
+                          ? "bg-violet-600 text-white border-violet-600 shadow-sm"
+                          : `${t.card} ${t.t3} border ${t.divider} hover:border-violet-300 hover:text-violet-600`
+                      }`}>
+                      {f.label}{cnt !== undefined ? ` (${cnt})` : ""}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 

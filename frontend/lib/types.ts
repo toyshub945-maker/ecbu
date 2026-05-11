@@ -157,7 +157,7 @@ export interface PricingProduct {
 }
 
 // ─── Product Manager ──────────────────────────────────────────────────────────
-export type PerfTier = "high" | "mid" | "growing" | "low";
+export type PerfTier = "high" | "mid" | "growing" | "low" | "none";
 
 export interface PMProduct {
   product_no: string;
