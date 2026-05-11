@@ -35,15 +35,6 @@ type AdRecord = {
   notes: string;
 };
 
-type StoreDailySummary = {
-  store: string;
-  cost: number;
-  orders: number;
-  cost_per_order: number;
-  revenue: number;
-  roi: number;
-  ad_balance: number;
-};
 
 type Summary = {
   total_campaigns: number;
@@ -135,10 +126,6 @@ export default function AdsPage() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadDate, setUploadDate] = useState("");
   const [uploadDateEnd, setUploadDateEnd] = useState("");
-  // Weekend / Live daily summary
-  const [summaryDate, setSummaryDate] = useState("");
-  const [storeDailySummary, setStoreDailySummary] = useState<StoreDailySummary[]>([]);
-  const [summaryLoading, setSummaryLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showBulkEdit, setShowBulkEdit] = useState(false);
@@ -179,31 +166,12 @@ export default function AdsPage() {
     }
   };
 
-  const fetchDailySummary = useCallback(async (date?: string) => {
-    setSummaryLoading(true);
-    try {
-      const qs = date ? `?date=${date}` : "";
-      const res = await fetch(backendUrl(`/api/ads/daily-summary${qs}`));
-      const data = await res.json();
-      if (data.date) setSummaryDate(data.date);
-      setStoreDailySummary(data.stores || []);
-    } catch (e) {
-      console.error("Failed to load daily summary");
-    } finally {
-      setSummaryLoading(false);
-    }
-  }, []);
-
   const isSpecialTab = activeTab === "Live" || activeTab === "Weekend";
 
   useEffect(() => {
     fetchAds();
     fetchSummary();
   }, [fetchAds]);
-
-  useEffect(() => {
-    if (isSpecialTab) fetchDailySummary(summaryDate || undefined);
-  }, [isSpecialTab, fetchDailySummary]);
 
   const handleUpload = async () => {
     if (!uploadFile || !uploadDate) {
@@ -627,54 +595,8 @@ export default function AdsPage() {
 
         {/* ── Weekend / Live special layout ────────────────────────────── */}
         {isSpecialTab && (
-          <div className="mb-4 space-y-4">
-            {/* Daily store summary */}
-            <div className={`${t.card} rounded-xl border ${t.divider} overflow-hidden`}>
-              <div className={`${theadBg} px-4 py-2.5 flex items-center justify-between`}>
-                <span className={`font-bold text-sm ${theadText} uppercase tracking-wide`}>
-                  📅 Daily Store Summary
-                </span>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="date"
-                    value={summaryDate}
-                    onChange={e => { setSummaryDate(e.target.value); fetchDailySummary(e.target.value); }}
-                    className={`px-2 py-1 text-xs border rounded ${t.inp}`}
-                  />
-                  <button onClick={() => fetchDailySummary(summaryDate || undefined)} className="px-3 py-1 text-xs bg-white/20 hover:bg-white/30 rounded text-white font-medium">
-                    {summaryLoading ? "…" : "Refresh"}
-                  </button>
-                </div>
-              </div>
-              <div className="overflow-auto">
-                <table className="w-full text-sm border-collapse">
-                  <thead>
-                    <tr className={`${theadBg}`}>
-                      {["Store", "Cost", "Orders", "Cost Per Order", "Gross Revenue", "ROI", "AD Balance"].map(h => (
-                        <th key={h} className={`border ${borderCls} px-4 py-2 text-xs font-bold ${theadText} uppercase tracking-wide text-center`}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {storeDailySummary.length === 0 ? (
-                      <tr><td colSpan={7} className={`text-center py-8 ${t.t4} text-sm`}>{summaryLoading ? "Loading…" : "No data — upload for TT1–TT4 stores first"}</td></tr>
-                    ) : storeDailySummary.map((row, i) => (
-                      <tr key={row.store} className={`${i % 2 === 1 ? (dark ? "bg-white/5" : "bg-amber-50/40") : ""} font-semibold`}>
-                        <td className={`border ${tbodyBorder} px-4 py-2.5 text-center font-bold ${t.t1}`}>{row.store}</td>
-                        <td className={`border ${tbodyBorder} px-4 py-2.5 text-center ${t.t2}`}>${row.cost.toFixed(2)}</td>
-                        <td className={`border ${tbodyBorder} px-4 py-2.5 text-center ${t.t2}`}>{row.orders}</td>
-                        <td className={`border ${tbodyBorder} px-4 py-2.5 text-center ${t.t2}`}>{row.cost_per_order > 0 ? `$${row.cost_per_order.toFixed(2)}` : "—"}</td>
-                        <td className={`border ${tbodyBorder} px-4 py-2.5 text-center ${t.t2}`}>${row.revenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                        <td className={`border ${tbodyBorder} px-4 py-2.5 text-center font-bold ${row.roi >= 10 ? "text-green-600" : row.roi > 0 ? "text-amber-600" : t.t4}`}>{row.roi > 0 ? row.roi.toFixed(2) : "—"}</td>
-                        <td className={`border ${tbodyBorder} px-4 py-2.5 text-center ${t.t2}`}>{row.ad_balance > 0 ? `$${row.ad_balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Weekend/Live campaign records */}
+          <div className="mb-4">
+            {/* Campaign records table */}
             <div className={`${t.card} rounded-xl border ${t.divider} overflow-hidden`}>
               <div className={`${theadBg} px-4 py-2.5`}>
                 <span className={`font-bold text-sm ${theadText} uppercase tracking-wide`}>
