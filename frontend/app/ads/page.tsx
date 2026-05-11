@@ -1243,12 +1243,10 @@ function AdsCreativeTab() {
                           <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${t.bar} ${t.t4}`}>{product.product_cards.length}</span>
                           {(() => {
                             const delivering = product.product_cards.filter(c => c.status === "Delivering").length;
-                            const performing = product.product_cards.filter(c => getCreativeBadge(c)?.type === "budget").length;
                             return delivering > 0 ? (
                               <>
-                                <span className={`text-[10px] ${t.t5}`}>·</span>
+                                <span className={`text-[10px] ${t.t4}`}>·</span>
                                 <span className="text-[10px] text-green-600 font-semibold">{delivering} delivering</span>
-                                {performing > 0 && <><span className={`text-[10px] ${t.t5}`}>·</span><span className="text-[10px] text-emerald-700 font-bold">💰 {performing} performing</span></>}
                               </>
                             ) : null;
                           })()}
@@ -1308,62 +1306,56 @@ function AdsCreativeTab() {
 
                     {/* Videos — shown AFTER product cards */}
                     {product.videos.length > 0 && (() => {
-                      const delivering = product.videos.filter(v => v.status === "Delivering").length;
-                      const trending = product.videos.filter(v => v.sku_orders > 0);
-                      const trendingCount = trending.length;
-                      const isTrendingOn = trendingFilter.has(product.product_no);
+                      const delivering  = product.videos.filter(v => v.status === "Delivering").length;
+                      const trendingCount = product.videos.filter(v => v.sku_orders > 0).length;
+                      const isTrendingOn  = trendingFilter.has(product.product_no);
                       const displayedVideos = isTrendingOn
                         ? product.videos.filter(v => v.sku_orders > 0)
                         : product.videos;
 
                       return (
                         <div className={product.product_cards.length > 0 ? `border-t ${t.divider}` : ""}>
-                          {/* Videos header */}
-                          <div className={`flex items-center gap-2 px-4 py-2 ${dark ? "bg-white/5" : "bg-gray-50"} border-b ${t.divider} flex-wrap`}>
+
+                          {/* ── Videos section header ── */}
+                          <div className={`flex items-center gap-2 px-4 py-2 ${dark ? "bg-white/5" : "bg-gray-50"} border-b ${t.divider}`}>
                             <span className="text-xs">🎬</span>
                             <span className={`text-xs font-bold uppercase tracking-wider ${t.t3}`}>Videos</span>
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${t.bar} ${t.t4}`}>{product.videos.length}</span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${t.bar} ${t.t4}`}>
+                              {isTrendingOn ? `${trendingCount} / ${product.videos.length}` : product.videos.length}
+                            </span>
+
                             {delivering > 0 && (
-                              <>
-                                <span className={`text-[10px] ${t.t4}`}>·</span>
-                                <span className="text-[10px] text-green-600 font-semibold">{delivering} delivering</span>
-                              </>
+                              <><span className={`text-[10px] ${t.t4}`}>·</span>
+                              <span className="text-[10px] text-green-600 font-semibold">{delivering} delivering</span></>
                             )}
+
+                            <span className={`text-[10px] ${t.t4}`}>·</span>
+
+                            {/* Trending pill — click to toggle filter */}
                             {trendingCount > 0 ? (
-                              <>
-                                <span className={`text-[10px] ${t.t4}`}>·</span>
-                                {/* Clickable trending filter toggle */}
-                                <button
-                                  onClick={e => {
-                                    e.stopPropagation();
-                                    setTrendingFilter(prev => {
-                                      const next = new Set(prev);
-                                      if (next.has(product.product_no)) next.delete(product.product_no);
-                                      else next.add(product.product_no);
-                                      return next;
-                                    });
-                                  }}
-                                  className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all ${
-                                    isTrendingOn
-                                      ? "bg-rose-500 text-white border-rose-500 shadow-sm"
-                                      : "bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100"
-                                  }`}>
-                                  🔥 {trendingCount} trending {isTrendingOn ? "▲" : ""}
-                                </button>
-                              </>
+                              <button
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  setTrendingFilter(prev => {
+                                    const next = new Set(prev);
+                                    if (next.has(product.product_no)) next.delete(product.product_no);
+                                    else next.add(product.product_no);
+                                    return next;
+                                  });
+                                }}
+                                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${
+                                  isTrendingOn
+                                    ? "bg-rose-500 text-white border-rose-500 shadow-sm"
+                                    : "bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100"
+                                }`}>
+                                🔥 {trendingCount} Trending {isTrendingOn ? "· show all" : "· filter"}
+                              </button>
                             ) : (
-                              <>
-                                <span className={`text-[10px] ${t.t4}`}>·</span>
-                                <span className={`text-[10px] ${t.t4}`}>0 trending</span>
-                              </>
-                            )}
-                            {isTrendingOn && (
-                              <span className="ml-1 text-[10px] font-semibold text-rose-600 animate-pulse">
-                                showing trending only
-                              </span>
+                              <span className={`text-[10px] ${t.t4}`}>0 trending</span>
                             )}
                           </div>
 
+                          {/* ── Video table ── */}
                           <div className="overflow-x-auto">
                             <table className="w-full text-xs">
                               <thead>
@@ -1381,19 +1373,32 @@ function AdsCreativeTab() {
                               </thead>
                               <tbody>
                                 {displayedVideos.map((v, i) => {
-                                  const badge = getCreativeBadge(v);
+                                  const badge      = getCreativeBadge(v);
                                   const isTrending = v.sku_orders > 0;
-                                  const rowBg = i % 2 === 1 ? (dark ? "bg-white/[0.02]" : "bg-gray-50/50") : "";
+                                  const rowBg      = i % 2 === 1 ? (dark ? "bg-white/[0.02]" : "bg-gray-50/50") : "";
+
+                                  // Single action badge: priority = excluded > auth > trending > add budget > —
+                                  const actionBadge = (() => {
+                                    if (badge?.type === "excluded") return (
+                                      <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-red-100 text-red-700 border border-red-300">🚫 Exclude</span>
+                                    );
+                                    if (badge?.type === "auth") return (
+                                      <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-300">🔑 Auth Needed</span>
+                                    );
+                                    if (isTrending) return (
+                                      <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-rose-100 text-rose-600 border border-rose-200">🔥 Trending</span>
+                                    );
+                                    if (badge?.type === "budget") return (
+                                      <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-green-100 text-green-700 border border-green-300">💰 Add Budget</span>
+                                    );
+                                    return <span className={`text-[10px] ${t.t5}`}>—</span>;
+                                  })();
+
                                   return (
-                                    <tr key={v.id} className={`border-t ${t.divider} ${rowBg} ${isTrending && isTrendingOn ? (dark ? "bg-rose-950/20" : "bg-rose-50/40") : ""}`}>
-                                      <td className="px-4 py-2.5 max-w-[200px]">
-                                        <div className="flex items-center gap-1.5">
-                                          {isTrending && <span className="text-[10px]">🔥</span>}
-                                          <div>
-                                            <div className={`font-medium ${t.t1} truncate text-xs`} title={v.video_title || ""}>{v.video_title || "–"}</div>
-                                            <div className={`${t.t4} truncate text-[10px]`}>{v.tiktok_account || "–"}</div>
-                                          </div>
-                                        </div>
+                                    <tr key={v.id} className={`border-t ${t.divider} ${rowBg}`}>
+                                      <td className="px-4 py-2.5 max-w-[220px]">
+                                        <div className={`font-medium ${t.t1} truncate text-xs`} title={v.video_title || ""}>{v.video_title || "–"}</div>
+                                        <div className={`${t.t4} truncate text-[10px]`}>{v.tiktok_account || "–"}</div>
                                       </td>
                                       <td className={`px-3 py-2.5 text-right font-mono ${t.t2}`}>${v.cost.toFixed(2)}</td>
                                       <td className={`px-3 py-2.5 text-right font-bold ${v.sku_orders > 0 ? "text-green-600" : t.t4}`}>{v.sku_orders || "–"}</td>
@@ -1410,21 +1415,8 @@ function AdsCreativeTab() {
                                           {v.status || "–"}
                                         </span>
                                       </td>
-                                      <td className="px-3 py-2.5 text-center">
-                                        {isTrending && (
-                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-600 border border-rose-200 mr-1">
-                                            🔥 Trending
-                                          </span>
-                                        )}
-                                        {badge && badge.type !== "budget" ? (
-                                          <span className={`px-2 py-1 rounded-lg text-[10px] font-bold border ${badge.cls}`}>
-                                            {badge.type === "excluded" ? "🚫 Exclude Now" : "🔑 Auth Needed"}
-                                          </span>
-                                        ) : badge?.type === "budget" ? (
-                                          <span className="px-2 py-1 rounded-lg text-[10px] font-bold border bg-green-100 text-green-700 border-green-300">
-                                            💰 Add Budget
-                                          </span>
-                                        ) : !isTrending ? <span className={`text-[10px] ${t.t5}`}>—</span> : null}
+                                      <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                                        {actionBadge}
                                       </td>
                                     </tr>
                                   );
