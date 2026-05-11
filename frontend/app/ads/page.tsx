@@ -770,6 +770,7 @@ function AdsCreativeTab() {
   const [actionFilter, setActionFilter] = useState<"budget"|"excluded"|"auth"|null>(null);
   const [productSearch, setProductSearch] = useState("");
   const [authOrdersOnly, setAuthOrdersOnly] = useState(false);
+  const [trendingFilter, setTrendingFilter] = useState<Set<string>>(new Set());
 
   const dark = themeKey !== "light";
 
@@ -1306,87 +1307,134 @@ function AdsCreativeTab() {
                     )}
 
                     {/* Videos — shown AFTER product cards */}
-                    {product.videos.length > 0 && (
-                      <div className={product.product_cards.length > 0 ? `border-t ${t.divider}` : ""}>
-                        {(() => {
-                          const delivering = product.videos.filter(v => v.status === "Delivering").length;
-                          const performing = product.videos.filter(v => getCreativeBadge(v)?.type === "budget").length;
-                          return (
-                            <div className={`flex items-center gap-2 px-4 py-2 ${dark ? "bg-white/5" : "bg-gray-50"} border-b ${t.divider}`}>
-                              <span className="text-xs">🎬</span>
-                              <span className={`text-xs font-bold uppercase tracking-wider ${t.t3}`}>Videos</span>
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${t.bar} ${t.t4}`}>{product.videos.length}</span>
-                              {delivering > 0 && (
-                                <>
-                                  <span className={`text-[10px] ${t.t5}`}>·</span>
-                                  <span className="text-[10px] text-green-600 font-semibold">{delivering} delivering</span>
-                                  {performing > 0
-                                    ? <><span className={`text-[10px] ${t.t5}`}>·</span><span className="text-[10px] text-emerald-700 font-bold">💰 {performing} performing</span></>
-                                    : <><span className={`text-[10px] ${t.t5}`}>·</span><span className={`text-[10px] ${t.t4}`}>0 performing</span></>
-                                  }
-                                </>
-                              )}
-                            </div>
-                          );
-                        })()}
+                    {product.videos.length > 0 && (() => {
+                      const delivering = product.videos.filter(v => v.status === "Delivering").length;
+                      const trending = product.videos.filter(v => v.sku_orders > 0);
+                      const trendingCount = trending.length;
+                      const isTrendingOn = trendingFilter.has(product.product_no);
+                      const displayedVideos = isTrendingOn
+                        ? product.videos.filter(v => v.sku_orders > 0)
+                        : product.videos;
 
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-xs">
-                            <thead>
-                              <tr className={dark ? "bg-slate-900/60" : "bg-gray-50/80"}>
-                                <th className={`text-left px-4 py-2 font-semibold ${t.t4}`}>Creator / Video</th>
-                                <th className={`text-right px-3 py-2 font-semibold ${t.t4}`}>Cost</th>
-                                <th className={`text-right px-3 py-2 font-semibold ${t.t4}`}>Orders</th>
-                                <th className={`text-right px-3 py-2 font-semibold ${t.t4}`}>Cost/Order</th>
-                                <th className={`text-right px-3 py-2 font-semibold ${t.t4}`}>Revenue</th>
-                                <th className={`text-right px-3 py-2 font-semibold ${t.t4}`}>ROI</th>
-                                <th className={`text-right px-3 py-2 font-semibold ${t.t4}`}>CTR</th>
-                                <th className={`text-center px-3 py-2 font-semibold ${t.t4}`}>Status</th>
-                                <th className={`text-center px-3 py-2 font-semibold ${t.t4}`}>Action</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {product.videos.map((v, i) => {
-                                const badge = getCreativeBadge(v);
-                                const rowBg = i % 2 === 1 ? (dark ? "bg-white/[0.02]" : "bg-gray-50/50") : "";
-                                return (
-                                  <tr key={v.id} className={`border-t ${t.divider} ${rowBg}`}>
-                                    <td className="px-4 py-2.5 max-w-[200px]">
-                                      <div className={`font-medium ${t.t1} truncate text-xs`} title={v.video_title || ""}>{v.video_title || "–"}</div>
-                                      <div className={`${t.t4} truncate text-[10px]`}>{v.tiktok_account || "–"}</div>
-                                    </td>
-                                    <td className={`px-3 py-2.5 text-right font-mono ${t.t2}`}>${v.cost.toFixed(2)}</td>
-                                    <td className={`px-3 py-2.5 text-right font-bold ${v.sku_orders > 0 ? "text-green-600" : t.t4}`}>{v.sku_orders || "–"}</td>
-                                    <td className={`px-3 py-2.5 text-right font-mono ${v.cost_per_order > 10 ? "text-red-600 font-bold" : v.cost_per_order > 0 && v.cost_per_order < 1 && v.sku_orders > 0 ? "text-green-600 font-bold" : t.t2}`}>
-                                      {v.cost_per_order > 0 ? `$${v.cost_per_order.toFixed(2)}` : "–"}
-                                    </td>
-                                    <td className={`px-3 py-2.5 text-right font-mono ${t.t2}`}>${v.gross_revenue.toFixed(2)}</td>
-                                    <td className={`px-3 py-2.5 text-right font-semibold ${v.roi >= 15 ? "text-green-600" : v.roi > 0 ? "text-amber-600" : t.t4}`}>
-                                      {v.roi > 0 ? v.roi.toFixed(1) : "–"}
-                                    </td>
-                                    <td className={`px-3 py-2.5 text-right ${t.t3}`}>{pct(v.click_rate)}</td>
-                                    <td className="px-3 py-2.5 text-center">
-                                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${statusCls(v.status)}`}>
-                                        {v.status || "–"}
-                                      </span>
-                                    </td>
-                                    <td className="px-3 py-2.5 text-center">
-                                      {badge ? (
-                                        <span className={`px-2 py-1 rounded-lg text-[10px] font-bold border ${badge.cls}`}>
-                                          {badge.type === "budget"   ? "💰 Add Budget" :
-                                           badge.type === "excluded"  ? "🚫 Exclude Now" :
-                                           "🔑 Authorization Needed"}
+                      return (
+                        <div className={product.product_cards.length > 0 ? `border-t ${t.divider}` : ""}>
+                          {/* Videos header */}
+                          <div className={`flex items-center gap-2 px-4 py-2 ${dark ? "bg-white/5" : "bg-gray-50"} border-b ${t.divider} flex-wrap`}>
+                            <span className="text-xs">🎬</span>
+                            <span className={`text-xs font-bold uppercase tracking-wider ${t.t3}`}>Videos</span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${t.bar} ${t.t4}`}>{product.videos.length}</span>
+                            {delivering > 0 && (
+                              <>
+                                <span className={`text-[10px] ${t.t4}`}>·</span>
+                                <span className="text-[10px] text-green-600 font-semibold">{delivering} delivering</span>
+                              </>
+                            )}
+                            {trendingCount > 0 ? (
+                              <>
+                                <span className={`text-[10px] ${t.t4}`}>·</span>
+                                {/* Clickable trending filter toggle */}
+                                <button
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    setTrendingFilter(prev => {
+                                      const next = new Set(prev);
+                                      if (next.has(product.product_no)) next.delete(product.product_no);
+                                      else next.add(product.product_no);
+                                      return next;
+                                    });
+                                  }}
+                                  className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all ${
+                                    isTrendingOn
+                                      ? "bg-rose-500 text-white border-rose-500 shadow-sm"
+                                      : "bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100"
+                                  }`}>
+                                  🔥 {trendingCount} trending {isTrendingOn ? "▲" : ""}
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <span className={`text-[10px] ${t.t4}`}>·</span>
+                                <span className={`text-[10px] ${t.t4}`}>0 trending</span>
+                              </>
+                            )}
+                            {isTrendingOn && (
+                              <span className="ml-1 text-[10px] font-semibold text-rose-600 animate-pulse">
+                                showing trending only
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className={dark ? "bg-slate-900/60" : "bg-gray-50/80"}>
+                                  <th className={`text-left px-4 py-2 font-semibold ${t.t4}`}>Creator / Video</th>
+                                  <th className={`text-right px-3 py-2 font-semibold ${t.t4}`}>Cost</th>
+                                  <th className={`text-right px-3 py-2 font-semibold ${t.t4}`}>Orders</th>
+                                  <th className={`text-right px-3 py-2 font-semibold ${t.t4}`}>Cost/Order</th>
+                                  <th className={`text-right px-3 py-2 font-semibold ${t.t4}`}>Revenue</th>
+                                  <th className={`text-right px-3 py-2 font-semibold ${t.t4}`}>ROI</th>
+                                  <th className={`text-right px-3 py-2 font-semibold ${t.t4}`}>CTR</th>
+                                  <th className={`text-center px-3 py-2 font-semibold ${t.t4}`}>Status</th>
+                                  <th className={`text-center px-3 py-2 font-semibold ${t.t4}`}>Action</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {displayedVideos.map((v, i) => {
+                                  const badge = getCreativeBadge(v);
+                                  const isTrending = v.sku_orders > 0;
+                                  const rowBg = i % 2 === 1 ? (dark ? "bg-white/[0.02]" : "bg-gray-50/50") : "";
+                                  return (
+                                    <tr key={v.id} className={`border-t ${t.divider} ${rowBg} ${isTrending && isTrendingOn ? (dark ? "bg-rose-950/20" : "bg-rose-50/40") : ""}`}>
+                                      <td className="px-4 py-2.5 max-w-[200px]">
+                                        <div className="flex items-center gap-1.5">
+                                          {isTrending && <span className="text-[10px]">🔥</span>}
+                                          <div>
+                                            <div className={`font-medium ${t.t1} truncate text-xs`} title={v.video_title || ""}>{v.video_title || "–"}</div>
+                                            <div className={`${t.t4} truncate text-[10px]`}>{v.tiktok_account || "–"}</div>
+                                          </div>
+                                        </div>
+                                      </td>
+                                      <td className={`px-3 py-2.5 text-right font-mono ${t.t2}`}>${v.cost.toFixed(2)}</td>
+                                      <td className={`px-3 py-2.5 text-right font-bold ${v.sku_orders > 0 ? "text-green-600" : t.t4}`}>{v.sku_orders || "–"}</td>
+                                      <td className={`px-3 py-2.5 text-right font-mono ${v.cost_per_order > 10 ? "text-red-600 font-bold" : v.cost_per_order > 0 && v.cost_per_order < 1 && v.sku_orders > 0 ? "text-green-600 font-bold" : t.t2}`}>
+                                        {v.cost_per_order > 0 ? `$${v.cost_per_order.toFixed(2)}` : "–"}
+                                      </td>
+                                      <td className={`px-3 py-2.5 text-right font-mono ${t.t2}`}>${v.gross_revenue.toFixed(2)}</td>
+                                      <td className={`px-3 py-2.5 text-right font-semibold ${v.roi >= 15 ? "text-green-600" : v.roi > 0 ? "text-amber-600" : t.t4}`}>
+                                        {v.roi > 0 ? v.roi.toFixed(1) : "–"}
+                                      </td>
+                                      <td className={`px-3 py-2.5 text-right ${t.t3}`}>{pct(v.click_rate)}</td>
+                                      <td className="px-3 py-2.5 text-center">
+                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${statusCls(v.status)}`}>
+                                          {v.status || "–"}
                                         </span>
-                                      ) : <span className={`text-[10px] ${t.t5}`}>—</span>}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
+                                      </td>
+                                      <td className="px-3 py-2.5 text-center">
+                                        {isTrending && (
+                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-600 border border-rose-200 mr-1">
+                                            🔥 Trending
+                                          </span>
+                                        )}
+                                        {badge && badge.type !== "budget" ? (
+                                          <span className={`px-2 py-1 rounded-lg text-[10px] font-bold border ${badge.cls}`}>
+                                            {badge.type === "excluded" ? "🚫 Exclude Now" : "🔑 Auth Needed"}
+                                          </span>
+                                        ) : badge?.type === "budget" ? (
+                                          <span className="px-2 py-1 rounded-lg text-[10px] font-bold border bg-green-100 text-green-700 border-green-300">
+                                            💰 Add Budget
+                                          </span>
+                                        ) : !isTrending ? <span className={`text-[10px] ${t.t5}`}>—</span> : null}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                   </div>
                 )}
