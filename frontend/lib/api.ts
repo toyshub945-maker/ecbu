@@ -229,10 +229,11 @@ export const api = {
     request<any>("/warehouse/cell-update", { method: "PUT", body: JSON.stringify(data) }),
 
   // TikTok Export Analytics
-  importTiktokExport: (file: File, store_code: string) => {
+  importTiktokExport: (file: File, store_code: string, source: "pm" | "board" = "pm") => {
     const fd = new FormData();
     fd.append("file", file);
     fd.append("store_code", store_code);
+    fd.append("source", source);
     return request<{ ok: boolean; imported: number; unmatched: number; period_start: string; period_end: string }>(
       "/analytics/import-tiktok-export", { method: "POST", body: fd }
     );
@@ -240,15 +241,15 @@ export const api = {
   boardProgress: (store_code: string) =>
     request<{ rows: any[] }>(`/board/progress/${store_code}`),
 
-  getTiktokExportList: (store_code: string) =>
+  getTiktokExportList: (store_code: string, source?: "pm" | "board") =>
     request<{ periods: { period_start: string; period_end: string; product_count: number; total_gmv: number; imported_at: string }[] }>(
-      `/analytics/tiktok-export/${store_code}`
+      `/analytics/tiktok-export/${store_code}${source ? `?source=${source}` : ""}`
     ),
   getTiktokExportData: (store_code: string, period_start: string, period_end: string) =>
     request<{ rows: any[] }>(`/analytics/tiktok-export/${store_code}/${period_start}/${period_end}`),
 
-  deleteTiktokExport: (store_code: string, period_start: string, period_end: string) =>
-    request<{ ok: boolean }>(`/analytics/tiktok-export/${store_code}/${period_start}/${period_end}`, { method: "DELETE" }),
+  deleteTiktokExport: (store_code: string, period_start: string, period_end: string, source?: "pm" | "board") =>
+    request<{ ok: boolean }>(`/analytics/tiktok-export/${store_code}/${period_start}/${period_end}${source ? `?source=${source}` : ""}`, { method: "DELETE" }),
 
   // Monthly Targets
   getTargets: () => request<{ targets: any[] }>("/targets"),

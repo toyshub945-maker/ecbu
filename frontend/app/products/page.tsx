@@ -64,7 +64,7 @@ function UploadPanel({ onClose, onUploaded, t }: { onClose: () => void; onUpload
 
   const loadHistory = useCallback(async () => {
     setLoadHist(true);
-    try { const r = await api.getTiktokExportList(store); setHist(r.periods || []); }
+    try { const r = await api.getTiktokExportList(store, "pm"); setHist(r.periods || []); }
     catch { setHist([]); } finally { setLoadHist(false); }
   }, [store]);
 
@@ -74,7 +74,7 @@ function UploadPanel({ onClose, onUploaded, t }: { onClose: () => void; onUpload
     if (!file) return;
     setBusy(true); setMsg(null);
     try {
-      const r = await api.importTiktokExport(file, store);
+      const r = await api.importTiktokExport(file, store, "pm");
       setMsg({ ok: true, text: `Imported ${r.imported} products · ${r.period_start} → ${r.period_end}` });
       setFile(null); if (fileRef.current) fileRef.current.value = "";
       await loadHistory(); onUploaded();
@@ -193,7 +193,7 @@ function UploadPanel({ onClose, onUploaded, t }: { onClose: () => void; onUpload
                           e.stopPropagation();
                           if (!confirm("Delete this upload?")) return;
                           try {
-                            await api.deleteTiktokExport(store, h.period_start, h.period_end);
+                            await api.deleteTiktokExport(store, h.period_start, h.period_end, "pm");
                             loadHistory();
                             onUploaded();
                           } catch (err: any) {

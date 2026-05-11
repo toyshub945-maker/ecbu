@@ -427,6 +427,8 @@ def init_db(db_path: str | None = None) -> None:
                 conversion_rate REAL DEFAULT 0, view_2s REAL, view_6s REAL,
                 view_25pct REAL, view_50pct REAL, view_75pct REAL, view_100pct REAL
             )""",
+            # Source column to separate Board uploads from Product Manager uploads
+            "ALTER TABLE tiktok_export_analytics ADD COLUMN source TEXT DEFAULT 'pm'",
         ]
         for sql in migrations:
             try:

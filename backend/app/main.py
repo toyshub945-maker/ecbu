@@ -751,6 +751,7 @@ async def import_analytics(
 async def import_tiktok_export(
     file: UploadFile = File(...),
     store_code: str = Form(...),
+    source: str = Form(default="pm"),  # 'pm' = Product Manager, 'board' = Board page
     _: dict = Depends(auth.get_current_user),
 ):
     if store_code not in config.STORE_NAME_BY_CODE:
@@ -806,9 +807,10 @@ async def import_tiktok_export(
                     seller_live_gmv, seller_video_gmv, creator_gmv, creator_live_gmv,
                     affiliate_video_gmv, product_card_gmv,
                     shop_tab_impressions, shop_tab_clicks, shop_tab_unique_clicks,
-                    shop_tab_customers, shop_tab_ctr, shop_tab_ctor, shop_tab_gmv, shop_tab_items_sold
+                    shop_tab_customers, shop_tab_ctr, shop_tab_ctor, shop_tab_gmv, shop_tab_items_sold,
+                    source
                 ) VALUES (
-                    ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+                    ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
                 )
                 ON CONFLICT(product_no, store_code, period_start, period_end) DO UPDATE SET
                     tiktok_product_id=excluded.tiktok_product_id,
@@ -835,6 +837,7 @@ async def import_tiktok_export(
                     shop_tab_customers=excluded.shop_tab_customers,
                     shop_tab_ctr=excluded.shop_tab_ctr, shop_tab_ctor=excluded.shop_tab_ctor,
                     shop_tab_gmv=excluded.shop_tab_gmv, shop_tab_items_sold=excluded.shop_tab_items_sold,
+                    source=excluded.source,
                     imported_at=CURRENT_TIMESTAMP
             """, (
                 product_no, store_code, period_start, period_end,
@@ -856,6 +859,7 @@ async def import_tiktok_export(
                 row.get("shop_tab_unique_clicks"), row.get("shop_tab_customers"),
                 row.get("shop_tab_ctr"), row.get("shop_tab_ctor"),
                 row.get("shop_tab_gmv"), row.get("shop_tab_items_sold"),
+                source,
             ))
             imported += 1
 
@@ -869,17 +873,27 @@ async def import_tiktok_export(
 
 
 @app.get("/api/analytics/tiktok-export/{store_code}")
-def get_tiktok_export_list(store_code: str, _: dict = Depends(auth.get_current_user)):
-    """Return list of imported periods for a store."""
+def get_tiktok_export_list(store_code: str, source: Optional[str] = None, _: dict = Depends(auth.get_current_user)):
+    """Return list of imported periods for a store. Filter by source ('pm' or 'board')."""
     with db.db_cursor() as cur:
-        cur.execute("""
-            SELECT period_start, period_end, COUNT(*) as product_count,
-                   SUM(gmv) as total_gmv, MAX(imported_at) as imported_at
-            FROM tiktok_export_analytics
-            WHERE store_code=?
-            GROUP BY period_start, period_end
-            ORDER BY period_start DESC
-        """, (store_code,))
+        if source:
+            cur.execute("""
+                SELECT period_start, period_end, COUNT(*) as product_count,
+                       SUM(gmv) as total_gmv, MAX(imported_at) as imported_at
+                FROM tiktok_export_analytics
+                WHERE store_code=? AND (source=? OR (source IS NULL AND ?='pm'))
+                GROUP BY period_start, period_end
+                ORDER BY period_start DESC
+            """, (store_code, source, source))
+        else:
+            cur.execute("""
+                SELECT period_start, period_end, COUNT(*) as product_count,
+                       SUM(gmv) as total_gmv, MAX(imported_at) as imported_at
+                FROM tiktok_export_analytics
+                WHERE store_code=?
+                GROUP BY period_start, period_end
+                ORDER BY period_start DESC
+            """, (store_code,))
         return {"periods": [dict(r) for r in cur.fetchall()]}
 
 
@@ -901,14 +915,22 @@ def get_tiktok_export_data(
 @app.delete("/api/analytics/tiktok-export/{store_code}/{period_start}/{period_end}")
 def delete_tiktok_export(
     store_code: str, period_start: str, period_end: str,
+    source: Optional[str] = None,
     _: dict = Depends(auth.get_current_user),
 ):
-    """Delete all analytics rows for a given period."""
+    """Delete analytics rows for a given period. If source provided, only delete that source's rows."""
     with db.db_cursor() as cur:
-        cur.execute("""
-            DELETE FROM tiktok_export_analytics
-            WHERE store_code=? AND period_start=? AND period_end=?
-        """, (store_code, period_start, period_end))
+        if source:
+            cur.execute("""
+                DELETE FROM tiktok_export_analytics
+                WHERE store_code=? AND period_start=? AND period_end=?
+                AND (source=? OR (source IS NULL AND ?='pm'))
+            """, (store_code, period_start, period_end, source, source))
+        else:
+            cur.execute("""
+                DELETE FROM tiktok_export_analytics
+                WHERE store_code=? AND period_start=? AND period_end=?
+            """, (store_code, period_start, period_end))
     return {"ok": True}
 
 
