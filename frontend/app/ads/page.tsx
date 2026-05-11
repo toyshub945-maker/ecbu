@@ -448,22 +448,52 @@ export default function AdsPage() {
   const inputCls = `${t.inp} rounded-lg text-sm`;
   const selectCls = `${t.inp} rounded-lg text-sm`;
 
+  // Shared page header used by both views
+  const pageHeader = (
+    <div className="flex items-center justify-between mb-1">
+      <div>
+        <h1 className={`text-2xl font-bold ${t.t1}`}>Ads Management</h1>
+        {mainView === "ads" && (
+          <p className={`text-sm ${t.t3} mt-0.5`}>
+            {summary ? `${summary.total_campaigns} campaigns • $${summary.total_spend.toFixed(2)} spend • ${summary.avg_roi}% avg ROI` : "Loading..."}
+          </p>
+        )}
+      </div>
+      <div className="flex gap-2 items-center">
+        {mainView === "ads" && (
+          <>
+            <button onClick={handleExport} className={`flex items-center gap-2 px-4 py-2 ${t.card} border ${t.divider} text-sm font-medium rounded-lg ${t.btn}`}>
+              📥 Export
+            </button>
+            <button onClick={() => setShowUpload(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+              📤 Upload Data
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+
+  // Shared tab switcher (sits below title)
+  const tabSwitcher = (
+    <div className={`flex gap-1 w-fit ${t.card} rounded-lg p-1 border ${t.divider} mb-4`}>
+      <button onClick={() => setMainView("ads")} className={`px-5 py-2 rounded-md text-sm font-semibold transition-all ${mainView === "ads" ? "bg-blue-600 text-white shadow-sm" : `${t.t3} hover:${t.bar}`}`}>
+        📊 Ads Management
+      </button>
+      <button onClick={() => setMainView("creative")} className={`px-5 py-2 rounded-md text-sm font-semibold transition-all ${mainView === "creative" ? "bg-violet-600 text-white shadow-sm" : `${t.t3} hover:${t.bar}`}`}>
+        🎨 Ads Creative
+      </button>
+    </div>
+  );
+
   if (mainView === "creative") {
     return (
       <>
         <Sidebar />
         <div className={`flex-1 overflow-auto ${t.page}`}>
           <div className="max-w-[1800px] mx-auto p-4">
-            <div className="flex items-center gap-4 mb-6">
-              <div className={`flex gap-1 ${t.card} rounded-lg p-1 border ${t.divider}`}>
-                <button onClick={() => setMainView("ads")} className={`px-5 py-2 rounded-md text-sm font-semibold transition-all ${mainView === "ads" ? "bg-blue-600 text-white" : `${t.t3} hover:${t.bar}`}`}>
-                  📊 Ads Management
-                </button>
-                <button onClick={() => setMainView("creative")} className={`px-5 py-2 rounded-md text-sm font-semibold transition-all ${mainView === "creative" ? "bg-violet-600 text-white" : `${t.t3} hover:${t.bar}`}`}>
-                  🎨 Ads Creative
-                </button>
-              </div>
-            </div>
+            {pageHeader}
+            {tabSwitcher}
             <AdsCreativeTab />
           </div>
         </div>
@@ -476,30 +506,8 @@ export default function AdsPage() {
       <Sidebar />
       <div className={`flex-1 overflow-auto ${t.page}`}>
       <div className="max-w-[1800px] mx-auto p-4">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className={`text-2xl font-bold ${t.t1}`}>Ads Management</h1>
-            <p className={`text-sm ${t.t3} mt-1`}>
-              {summary ? `${summary.total_campaigns} campaigns • $${summary.total_spend.toFixed(2)} spend • ${summary.avg_roi}% avg ROI` : "Loading..."}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <div className={`flex gap-1 ${t.card} rounded-lg p-1 border ${t.divider} mr-2`}>
-              <button onClick={() => setMainView("ads")} className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-all ${mainView === "ads" ? "bg-blue-600 text-white" : `${t.t3} hover:${t.bar}`}`}>
-                📊 Ads Management
-              </button>
-              <button onClick={() => setMainView("creative")} className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-all ${mainView === "creative" ? "bg-violet-600 text-white" : `${t.t3} hover:${t.bar}`}`}>
-                🎨 Ads Creative
-              </button>
-            </div>
-            <button onClick={handleExport} className={`flex items-center gap-2 px-4 py-2 ${t.card} border ${t.divider} text-sm font-medium ${t.btn}`}>
-              📥 Export
-            </button>
-            <button onClick={() => setShowUpload(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-              📤 Upload Data
-            </button>
-          </div>
-        </div>
+        {pageHeader}
+        {tabSwitcher}
 
         {error && <div className="mb-3 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">{error}</div>}
         {success && <div className="mb-3 p-3 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">{success}</div>}
