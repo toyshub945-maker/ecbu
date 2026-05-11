@@ -752,7 +752,7 @@ function pct(v: number | null | undefined) {
 }
 
 function AdsCreativeTab() {
-  const { theme: t } = useTheme();
+  const { theme: t, themeKey } = useTheme();
   const [store, setStore] = useState("TT1");
   const [uploads, setUploads] = useState<CreativeUpload[]>([]);
   const [selectedUploadId, setSelectedUploadId] = useState<number | null>(null);
@@ -766,14 +766,15 @@ function AdsCreativeTab() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
+  const [actionFilter, setActionFilter] = useState<"budget"|"excluded"|"auth"|null>(null);
+
+  const dark = themeKey !== "light";
 
   const loadUploads = useCallback(async () => {
     try {
       const d = await api.creativeUploads(store);
       setUploads(d.uploads);
-      if (d.uploads.length > 0 && !selectedUploadId) {
-        setSelectedUploadId(d.uploads[0].id);
-      }
+      if (d.uploads.length > 0 && !selectedUploadId) setSelectedUploadId(d.uploads[0].id);
     } catch { setUploads([]); }
   }, [store]);
 
@@ -783,13 +784,12 @@ function AdsCreativeTab() {
     try {
       const d = await api.creativeProducts(store, selectedUploadId);
       setProducts(d.products);
-      // Auto-expand all products
       setExpandedProducts(new Set(d.products.map((p: CreativeProduct) => p.product_no)));
     } catch { setProducts([]); }
     finally { setLoading(false); }
   }, [store, selectedUploadId]);
 
-  useEffect(() => { setSelectedUploadId(null); loadUploads(); }, [store]);
+  useEffect(() => { setSelectedUploadId(null); setActionFilter(null); loadUploads(); }, [store]);
   useEffect(() => { loadProducts(); }, [loadProducts]);
 
   const handleUpload = async () => {
@@ -823,7 +823,7 @@ function AdsCreativeTab() {
     });
   };
 
-  // Count badges across all products
+  // Aggregate badge counts
   const badgeSummary = products.reduce((acc, p) => {
     [...p.videos, ...p.product_cards].forEach(e => {
       const b = getCreativeBadge(e);
@@ -834,54 +834,76 @@ function AdsCreativeTab() {
     return acc;
   }, { budget: 0, excluded: 0, auth: 0 });
 
+  // Filter products by active action filter
+  const filteredProducts = actionFilter === null ? products : products.filter(product => {
+    const allEntries = [...product.videos, ...product.product_cards];
+    return allEntries.some(e => {
+      const b = getCreativeBadge(e);
+      if (actionFilter === "budget")   return b?.label.includes("extra budget");
+      if (actionFilter === "excluded") return b?.label.includes("Excluded");
+      if (actionFilter === "auth")     return b?.label.includes("ads code");
+      return false;
+    });
+  });
+
+  const totalVideos = products.reduce((a, p) => a + p.videos.length, 0);
+  const totalCards  = products.reduce((a, p) => a + p.product_cards.length, 0);
+
+  const statusCls = (s: string | null) =>
+    s === "Delivering"            ? "bg-green-100 text-green-700" :
+    s === "Authorization needed"  ? "bg-amber-100 text-amber-700" :
+    s === "Excluded"              ? "bg-red-100 text-red-700"     : "bg-gray-100 text-gray-500";
+
   return (
     <div>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className={`text-2xl font-bold ${t.t1}`}>Ads Creative</h1>
-          <p className={`text-sm ${t.t3} mt-1`}>Analyse creative performance by store and date range</p>
+          <p className={`text-sm ${t.t3} mt-0.5`}>Analyse creative performance by store and date range</p>
         </div>
         <button onClick={() => setShowUploadModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-semibold hover:bg-violet-700">
+          className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-xl text-sm font-semibold hover:bg-violet-700 shadow-sm">
           📤 Upload Creative Data
         </button>
       </div>
 
-      {error && <div className="mb-3 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">{error}</div>}
-      {success && <div className="mb-3 p-3 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">{success}</div>}
+      {error   && <div className="mb-3 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm">{error}</div>}
+      {success && <div className="mb-3 p-3 bg-green-50 border border-green-200 text-green-700 rounded-xl text-sm">{success}</div>}
 
-      {/* Store tabs */}
-      <div className={`flex gap-1 ${t.card} rounded-lg p-1 border ${t.divider} mb-4 w-fit`}>
+      {/* ── Store tabs ── */}
+      <div className={`flex gap-1 ${t.card} rounded-xl p-1 border ${t.divider} mb-4 w-fit`}>
         {CREATIVE_STORES.map(s => (
           <button key={s} onClick={() => setStore(s)}
-            className={`px-5 py-2 rounded-md text-sm font-semibold transition-all ${store === s ? "bg-violet-600 text-white" : `${t.t3} hover:${t.bar}`}`}>
+            className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all ${store === s ? "bg-violet-600 text-white shadow-sm" : `${t.t3} hover:${t.bar}`}`}>
             {s}
           </button>
         ))}
       </div>
 
-      {/* Uploads list */}
+      {/* ── Uploaded period selector ── */}
       {uploads.length > 0 && (
-        <div className={`${t.card} border ${t.divider} rounded-xl p-4 mb-5`}>
-          <h3 className={`text-sm font-semibold ${t.t2} mb-3`}>Uploaded Data — {store}</h3>
+        <div className={`${t.card} border ${t.divider} rounded-xl p-3 mb-4`}>
+          <div className={`text-[10px] font-bold uppercase tracking-widest ${t.t4} mb-2`}>Uploaded Periods — {store}</div>
           <div className="flex flex-wrap gap-2">
             {uploads.map(u => (
               <div key={u.id}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-all ${
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-all ${
                   selectedUploadId === u.id
-                    ? "border-violet-500 bg-violet-500/10"
-                    : `${t.divider} ${t.bar}/50 hover:border-violet-400`
+                    ? "border-violet-500 bg-violet-50 text-violet-700 shadow-sm"
+                    : `${t.divider} hover:border-violet-400 ${t.t2}`
                 }`}
-                onClick={() => setSelectedUploadId(u.id)}
-              >
+                onClick={() => setSelectedUploadId(u.id)}>
+                <div className={`w-1.5 h-1.5 rounded-full ${selectedUploadId === u.id ? "bg-violet-500" : "bg-gray-300"}`} />
                 <div>
-                  <div className={`font-semibold ${t.t1}`}>{u.date_from} → {u.date_to}</div>
-                  <div className={`text-xs ${t.t4}`}>{u.filename} · {u.row_count} rows</div>
+                  <div className="font-semibold text-xs">{u.date_from} → {u.date_to}</div>
+                  <div className={`text-[10px] ${t.t4}`}>{u.row_count} rows</div>
                 </div>
                 <button onClick={e => { e.stopPropagation(); handleDeleteUpload(u.id); }}
-                  className="ml-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded p-1 transition-colors" title="Delete upload">
-                  🗑️
+                  className="ml-1 text-red-400 hover:text-red-600 p-0.5 rounded transition-colors" title="Delete">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                  </svg>
                 </button>
               </div>
             ))}
@@ -893,144 +915,220 @@ function AdsCreativeTab() {
         <div className={`${t.card} border ${t.divider} rounded-xl p-12 text-center mb-5`}>
           <div className="text-4xl mb-3">🎨</div>
           <p className={`font-semibold ${t.t2}`}>No creative data uploaded for {store}</p>
-          <p className={`text-sm ${t.t3} mt-1`}>Upload a TikTok Ads creative report Excel file to get started</p>
-          <button onClick={() => setShowUploadModal(true)} className="mt-4 px-5 py-2 bg-violet-600 text-white rounded-lg text-sm font-semibold hover:bg-violet-700">
+          <p className={`text-sm ${t.t3} mt-1`}>Upload a TikTok Ads creative report to get started</p>
+          <button onClick={() => setShowUploadModal(true)}
+            className="mt-4 px-5 py-2 bg-violet-600 text-white rounded-xl text-sm font-semibold hover:bg-violet-700">
             Upload Now
           </button>
         </div>
       )}
 
-      {/* Badge summary */}
+      {/* ── Action filter cards ── */}
       {products.length > 0 && (
-        <div className="flex flex-wrap gap-3 mb-5">
-          <div className="flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-200 rounded-xl text-sm">
-            <span className="font-bold text-green-700">{badgeSummary.budget}</span>
-            <span className="text-green-600">💰 Can add extra budget</span>
-          </div>
-          <div className="flex items-center gap-2 px-4 py-2 bg-red-50 border border-red-200 rounded-xl text-sm">
-            <span className="font-bold text-red-700">{badgeSummary.excluded}</span>
-            <span className="text-red-600">🚫 Excluded needed</span>
-          </div>
-          <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border border-amber-200 rounded-xl text-sm">
-            <span className="font-bold text-amber-700">{badgeSummary.auth}</span>
-            <span className="text-amber-600">⚠️ Auth code needed</span>
-          </div>
-          <div className={`ml-auto flex items-center gap-2 px-4 py-2 ${t.card} border ${t.divider} rounded-xl text-sm ${t.t3}`}>
-            {products.length} products · {products.reduce((a, p) => a + p.videos.length, 0)} videos · {products.reduce((a, p) => a + p.product_cards.length, 0)} product cards
-          </div>
+        <div className="grid grid-cols-4 gap-3 mb-5">
+          {/* All */}
+          <button
+            onClick={() => setActionFilter(null)}
+            className={`flex flex-col gap-1 px-4 py-3 rounded-xl border text-left transition-all ${
+              actionFilter === null
+                ? `border-violet-400 ${dark ? "bg-violet-950" : "bg-violet-50"} shadow-sm`
+                : `${t.card} ${t.divider} hover:border-violet-300`
+            }`}>
+            <div className={`text-[10px] font-bold uppercase tracking-wider ${actionFilter === null ? "text-violet-600" : t.t4}`}>All Products</div>
+            <div className={`text-2xl font-black ${actionFilter === null ? "text-violet-600" : t.t1}`}>{products.length}</div>
+            <div className={`text-[10px] ${t.t4}`}>{totalVideos} videos · {totalCards} cards</div>
+          </button>
+
+          {/* Add budget */}
+          <button
+            onClick={() => setActionFilter(actionFilter === "budget" ? null : "budget")}
+            className={`flex flex-col gap-1 px-4 py-3 rounded-xl border text-left transition-all ${
+              actionFilter === "budget"
+                ? "border-green-400 bg-green-50 shadow-sm"
+                : `${t.card} ${t.divider} hover:border-green-300`
+            }`}>
+            <div className={`text-[10px] font-bold uppercase tracking-wider ${actionFilter === "budget" ? "text-green-700" : t.t4}`}>💰 Add Budget</div>
+            <div className={`text-2xl font-black ${actionFilter === "budget" ? "text-green-700" : "text-green-600"}`}>{badgeSummary.budget}</div>
+            <div className={`text-[10px] ${actionFilter === "budget" ? "text-green-600" : t.t4}`}>creatives performing well</div>
+          </button>
+
+          {/* Needs exclusion */}
+          <button
+            onClick={() => setActionFilter(actionFilter === "excluded" ? null : "excluded")}
+            className={`flex flex-col gap-1 px-4 py-3 rounded-xl border text-left transition-all ${
+              actionFilter === "excluded"
+                ? "border-red-400 bg-red-50 shadow-sm"
+                : `${t.card} ${t.divider} hover:border-red-300`
+            }`}>
+            <div className={`text-[10px] font-bold uppercase tracking-wider ${actionFilter === "excluded" ? "text-red-700" : t.t4}`}>🚫 Needs Exclusion</div>
+            <div className={`text-2xl font-black ${actionFilter === "excluded" ? "text-red-700" : "text-red-500"}`}>{badgeSummary.excluded}</div>
+            <div className={`text-[10px] ${actionFilter === "excluded" ? "text-red-600" : t.t4}`}>high cost / no orders</div>
+          </button>
+
+          {/* Get auth code */}
+          <button
+            onClick={() => setActionFilter(actionFilter === "auth" ? null : "auth")}
+            className={`flex flex-col gap-1 px-4 py-3 rounded-xl border text-left transition-all ${
+              actionFilter === "auth"
+                ? "border-amber-400 bg-amber-50 shadow-sm"
+                : `${t.card} ${t.divider} hover:border-amber-300`
+            }`}>
+            <div className={`text-[10px] font-bold uppercase tracking-wider ${actionFilter === "auth" ? "text-amber-700" : t.t4}`}>🔑 Get Auth Code</div>
+            <div className={`text-2xl font-black ${actionFilter === "auth" ? "text-amber-700" : "text-amber-500"}`}>{badgeSummary.auth}</div>
+            <div className={`text-[10px] ${actionFilter === "auth" ? "text-amber-600" : t.t4}`}>contact creator for code</div>
+          </button>
         </div>
       )}
 
-      {/* Products grid */}
+      {/* ── Product list ── */}
       {loading ? (
-        <div className={`text-center py-20 ${t.t4}`}>Loading creatives...</div>
+        <div className="flex items-center justify-center py-20 gap-3">
+          <div className="w-6 h-6 border-2 border-violet-200 border-t-violet-600 rounded-full animate-spin" />
+          <span className={`${t.t4} text-sm`}>Loading creatives…</span>
+        </div>
       ) : (
-        <div className="space-y-4">
-          {products.map(product => {
+        <div className="space-y-3">
+          {filteredProducts.length === 0 && products.length > 0 && (
+            <div className={`text-center py-12 ${t.t4} text-sm`}>No products match this filter</div>
+          )}
+          {filteredProducts.map(product => {
             const isExpanded = expandedProducts.has(product.product_no);
             const allEntries = [...product.videos, ...product.product_cards];
-            const badges = allEntries.map(getCreativeBadge).filter(Boolean);
-            const hasBudget = badges.some(b => b?.label.includes("extra budget"));
-            const hasExcluded = badges.some(b => b?.label.includes("Excluded"));
-            const hasAuth = badges.some(b => b?.label.includes("ads code"));
+
+            // Aggregate metrics for this product
+            const totalCost    = allEntries.reduce((s, e) => s + e.cost, 0);
+            const totalOrders  = allEntries.reduce((s, e) => s + e.sku_orders, 0);
+            const totalRev     = allEntries.reduce((s, e) => s + e.gross_revenue, 0);
+            const avgROI       = allEntries.filter(e => e.roi > 0).reduce((s, e, _, a) => s + e.roi / a.length, 0);
+
+            const hasBudget   = allEntries.some(e => getCreativeBadge(e)?.label.includes("extra budget"));
+            const hasExcluded = allEntries.some(e => getCreativeBadge(e)?.label.includes("Excluded"));
+            const hasAuth     = allEntries.some(e => getCreativeBadge(e)?.label.includes("ads code"));
+
+            const budgetCount   = allEntries.filter(e => getCreativeBadge(e)?.label.includes("extra budget")).length;
+            const excludedCount = allEntries.filter(e => getCreativeBadge(e)?.label.includes("Excluded")).length;
+            const authCount     = allEntries.filter(e => getCreativeBadge(e)?.label.includes("ads code")).length;
 
             return (
-              <div key={product.product_no} className={`${t.card} border ${t.divider} rounded-xl overflow-hidden`}>
-                {/* Product header */}
-                <div className={`flex items-center gap-3 px-4 py-3 ${t.bar}/50 border-b ${t.divider} cursor-pointer`}
+              <div key={product.product_no} className={`${t.card} border ${t.divider} rounded-xl overflow-hidden shadow-sm`}>
+                {/* ── Product row (always visible) ── */}
+                <div
+                  className={`flex items-center gap-4 px-4 py-3 cursor-pointer transition-colors ${dark ? "hover:bg-white/5" : "hover:bg-gray-50"}`}
                   onClick={() => toggleProduct(product.product_no)}>
+
+                  {/* Image */}
                   {product.image_url ? (
-                    <img src={product.image_url} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0" />
+                    <img src={product.image_url} alt="" className="w-11 h-11 rounded-xl object-cover shrink-0 ring-1 ring-black/10" />
                   ) : (
-                    <div className={`w-10 h-10 rounded-lg ${t.bar} flex items-center justify-center text-xs font-bold ${t.t4} shrink-0`}>
+                    <div className={`w-11 h-11 rounded-xl ${t.bar} flex items-center justify-center text-xs font-bold ${t.t4} shrink-0`}>
                       #{product.product_no}
                     </div>
                   )}
-                  <div className="min-w-0 flex-1">
-                    <div className={`font-bold ${t.t1}`}>#{product.product_no}
-                      {product.warehouse_name && <span className={`ml-2 text-sm font-normal ${t.t3}`}>{product.warehouse_name}</span>}
+
+                  {/* Product info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`font-bold text-sm ${t.t1}`}>#{product.product_no}</span>
+                      {product.warehouse_name && <span className={`text-xs ${t.t3} truncate`}>{product.warehouse_name}</span>}
                     </div>
-                    <div className={`text-xs ${t.t4}`}>{product.campaign_name}</div>
+                    <div className="flex items-center gap-3 mt-0.5">
+                      <span className={`text-[10px] ${t.t4}`}>{product.videos.length} videos · {product.product_cards.length} cards</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {hasBudget && <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 border border-green-300 rounded-full">💰 Budget</span>}
-                    {hasExcluded && <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 border border-red-300 rounded-full">🚫 Exclude</span>}
-                    {hasAuth && <span className="px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 border border-amber-300 rounded-full">⚠️ Auth</span>}
-                    <span className={`text-xs ${t.t3}`}>{product.videos.length} videos · {product.product_cards.length} cards</span>
-                    <span className={`text-lg ${t.t4}`}>{isExpanded ? "▲" : "▼"}</span>
+
+                  {/* Aggregate stats */}
+                  <div className="hidden sm:flex items-center gap-5 shrink-0">
+                    <div className="text-center">
+                      <div className={`text-[10px] ${t.t4} uppercase tracking-wider`}>Cost</div>
+                      <div className={`text-sm font-bold ${t.t2}`}>${totalCost.toFixed(0)}</div>
+                    </div>
+                    <div className="text-center">
+                      <div className={`text-[10px] ${t.t4} uppercase tracking-wider`}>Orders</div>
+                      <div className={`text-sm font-bold ${totalOrders > 0 ? "text-green-600" : t.t4}`}>{totalOrders}</div>
+                    </div>
+                    <div className="text-center">
+                      <div className={`text-[10px] ${t.t4} uppercase tracking-wider`}>Revenue</div>
+                      <div className={`text-sm font-bold ${t.t2}`}>${totalRev.toFixed(0)}</div>
+                    </div>
+                    <div className="text-center">
+                      <div className={`text-[10px] ${t.t4} uppercase tracking-wider`}>Avg ROI</div>
+                      <div className={`text-sm font-bold ${avgROI >= 15 ? "text-green-600" : avgROI > 0 ? "text-amber-600" : t.t4}`}>
+                        {avgROI > 0 ? avgROI.toFixed(1) : "–"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action badges */}
+                  <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                    {hasBudget   && <span className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold bg-green-100 text-green-700 border border-green-200 rounded-lg">💰 {budgetCount}</span>}
+                    {hasExcluded && <span className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold bg-red-100 text-red-700 border border-red-200 rounded-lg">🚫 {excludedCount}</span>}
+                    {hasAuth     && <span className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200 rounded-lg">🔑 {authCount}</span>}
+                    <svg className={`w-4 h-4 ${t.t4} ml-1 transition-transform ${isExpanded ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
+                    </svg>
                   </div>
                 </div>
 
+                {/* ── Expanded creative rows ── */}
                 {isExpanded && (
-                  <div className="p-4 space-y-4">
-                    {/* Videos section */}
+                  <div className={`border-t ${t.divider}`}>
+
+                    {/* Videos */}
                     {product.videos.length > 0 && (
                       <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className={`text-xs font-bold uppercase tracking-wider ${t.t3}`}>🎬 Video</span>
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${t.bar} ${t.t4}`}>{product.videos.length} creatives</span>
-                          <span className={`text-xs ${t.t4}`}>
-                            {product.videos.filter(v => getCreativeBadge(v)?.label.includes("extra budget")).length} performing
-                          </span>
+                        <div className={`flex items-center gap-2 px-4 py-2 ${dark ? "bg-white/5" : "bg-gray-50"} border-b ${t.divider}`}>
+                          <span className="text-xs">🎬</span>
+                          <span className={`text-xs font-bold uppercase tracking-wider ${t.t3}`}>Videos</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${t.bar} ${t.t4}`}>{product.videos.length}</span>
                         </div>
                         <div className="overflow-x-auto">
                           <table className="w-full text-xs">
                             <thead>
-                              <tr className={`${t.bar}/60`}>
-                                <th className={`text-left px-3 py-2 font-semibold ${t.t3}`}>Video / Creator</th>
-                                <th className={`text-right px-3 py-2 font-semibold ${t.t3}`}>Cost</th>
-                                <th className={`text-right px-3 py-2 font-semibold ${t.t3}`}>Orders</th>
-                                <th className={`text-right px-3 py-2 font-semibold ${t.t3}`}>Cost/Order</th>
-                                <th className={`text-right px-3 py-2 font-semibold ${t.t3}`}>Revenue</th>
-                                <th className={`text-right px-3 py-2 font-semibold ${t.t3}`}>ROI</th>
-                                <th className={`text-right px-3 py-2 font-semibold ${t.t3}`}>Impressions</th>
-                                <th className={`text-right px-3 py-2 font-semibold ${t.t3}`}>CTR</th>
-                                <th className={`text-right px-3 py-2 font-semibold ${t.t3}`}>CVR</th>
-                                <th className={`text-right px-3 py-2 font-semibold ${t.t3}`}>2s View</th>
-                                <th className={`text-right px-3 py-2 font-semibold ${t.t3}`}>100% View</th>
-                                <th className={`text-center px-3 py-2 font-semibold ${t.t3}`}>Status / Badge</th>
+                              <tr className={dark ? "bg-slate-900/60" : "bg-gray-50/80"}>
+                                <th className={`text-left px-4 py-2 font-semibold ${t.t4}`}>Creator / Video</th>
+                                <th className={`text-right px-3 py-2 font-semibold ${t.t4}`}>Cost</th>
+                                <th className={`text-right px-3 py-2 font-semibold ${t.t4}`}>Orders</th>
+                                <th className={`text-right px-3 py-2 font-semibold ${t.t4}`}>Cost/Order</th>
+                                <th className={`text-right px-3 py-2 font-semibold ${t.t4}`}>Revenue</th>
+                                <th className={`text-right px-3 py-2 font-semibold ${t.t4}`}>ROI</th>
+                                <th className={`text-right px-3 py-2 font-semibold ${t.t4}`}>CTR</th>
+                                <th className={`text-center px-3 py-2 font-semibold ${t.t4}`}>Status</th>
+                                <th className={`text-center px-3 py-2 font-semibold ${t.t4}`}>Action</th>
                               </tr>
                             </thead>
                             <tbody>
                               {product.videos.map((v, i) => {
                                 const badge = getCreativeBadge(v);
+                                const rowBg = i % 2 === 1 ? (dark ? "bg-white/[0.02]" : "bg-gray-50/50") : "";
                                 return (
-                                  <tr key={v.id} className={`border-t ${t.divider} ${i % 2 === 1 ? `${t.bar}/30` : ""}`}>
-                                    <td className="px-3 py-2 max-w-[220px]">
-                                      <div className={`font-medium ${t.t1} truncate`} title={v.video_title || ""}>
-                                        {v.video_title || "–"}
-                                      </div>
-                                      <div className={`${t.t4} truncate`}>{v.tiktok_account || "–"}</div>
-                                      {v.time_posted && <div className={`${t.t5} text-[10px]`}>{v.time_posted}</div>}
+                                  <tr key={v.id} className={`border-t ${t.divider} ${rowBg}`}>
+                                    <td className="px-4 py-2.5 max-w-[200px]">
+                                      <div className={`font-medium ${t.t1} truncate text-xs`} title={v.video_title || ""}>{v.video_title || "–"}</div>
+                                      <div className={`${t.t4} truncate text-[10px]`}>{v.tiktok_account || "–"}</div>
                                     </td>
-                                    <td className={`px-3 py-2 text-right font-mono ${t.t2}`}>${v.cost.toFixed(2)}</td>
-                                    <td className={`px-3 py-2 text-right font-semibold ${v.sku_orders > 0 ? "text-green-600" : t.t4}`}>{v.sku_orders}</td>
-                                    <td className={`px-3 py-2 text-right font-mono ${v.cost_per_order > 10 ? "text-red-600 font-bold" : v.cost_per_order < 1 && v.sku_orders > 0 ? "text-green-600 font-bold" : t.t2}`}>
+                                    <td className={`px-3 py-2.5 text-right font-mono ${t.t2}`}>${v.cost.toFixed(2)}</td>
+                                    <td className={`px-3 py-2.5 text-right font-bold ${v.sku_orders > 0 ? "text-green-600" : t.t4}`}>{v.sku_orders || "–"}</td>
+                                    <td className={`px-3 py-2.5 text-right font-mono ${v.cost_per_order > 10 ? "text-red-600 font-bold" : v.cost_per_order > 0 && v.cost_per_order < 1 && v.sku_orders > 0 ? "text-green-600 font-bold" : t.t2}`}>
                                       {v.cost_per_order > 0 ? `$${v.cost_per_order.toFixed(2)}` : "–"}
                                     </td>
-                                    <td className={`px-3 py-2 text-right font-mono ${t.t2}`}>${v.gross_revenue.toFixed(2)}</td>
-                                    <td className={`px-3 py-2 text-right font-semibold ${v.roi >= 15 ? "text-green-600" : v.roi > 0 ? "text-amber-600" : t.t4}`}>
+                                    <td className={`px-3 py-2.5 text-right font-mono ${t.t2}`}>${v.gross_revenue.toFixed(2)}</td>
+                                    <td className={`px-3 py-2.5 text-right font-semibold ${v.roi >= 15 ? "text-green-600" : v.roi > 0 ? "text-amber-600" : t.t4}`}>
                                       {v.roi > 0 ? v.roi.toFixed(1) : "–"}
                                     </td>
-                                    <td className={`px-3 py-2 text-right ${t.t3}`}>{v.impressions > 0 ? v.impressions.toLocaleString() : "–"}</td>
-                                    <td className={`px-3 py-2 text-right ${t.t3}`}>{pct(v.click_rate)}</td>
-                                    <td className={`px-3 py-2 text-right ${t.t3}`}>{pct(v.conversion_rate)}</td>
-                                    <td className={`px-3 py-2 text-right ${t.t3}`}>{pct(v.view_2s)}</td>
-                                    <td className={`px-3 py-2 text-right ${t.t3}`}>{pct(v.view_100pct)}</td>
-                                    <td className="px-3 py-2 text-center">
-                                      <div className="flex flex-col items-center gap-1">
-                                        <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
-                                          v.status === "Delivering" ? "bg-green-100 text-green-700" :
-                                          v.status === "Authorization needed" ? "bg-amber-100 text-amber-700" :
-                                          v.status === "Excluded" ? "bg-red-100 text-red-700" :
-                                          "bg-gray-100 text-gray-500"
-                                        }`}>{v.status || "–"}</span>
-                                        {badge && (
-                                          <span className={`px-2 py-0.5 rounded border text-[10px] font-semibold ${badge.cls}`}>
-                                            {badge.label}
-                                          </span>
-                                        )}
-                                      </div>
+                                    <td className={`px-3 py-2.5 text-right ${t.t3}`}>{pct(v.click_rate)}</td>
+                                    <td className="px-3 py-2.5 text-center">
+                                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${statusCls(v.status)}`}>
+                                        {v.status || "–"}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2.5 text-center">
+                                      {badge ? (
+                                        <span className={`px-2 py-1 rounded-lg text-[10px] font-bold border ${badge.cls}`}>
+                                          {badge.label.includes("extra budget") ? "💰 Add Budget" :
+                                           badge.label.includes("Excluded")     ? "🚫 Exclude Now" :
+                                           "🔑 Get Auth Code"}
+                                        </span>
+                                      ) : <span className={`text-[10px] ${t.t5}`}>—</span>}
                                     </td>
                                   </tr>
                                 );
@@ -1041,59 +1139,57 @@ function AdsCreativeTab() {
                       </div>
                     )}
 
-                    {/* Product Card section */}
+                    {/* Product Cards */}
                     {product.product_cards.length > 0 && (
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className={`text-xs font-bold uppercase tracking-wider ${t.t3}`}>🃏 Product Card</span>
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${t.bar} ${t.t4}`}>{product.product_cards.length} entries</span>
+                      <div className={product.videos.length > 0 ? `border-t ${t.divider}` : ""}>
+                        <div className={`flex items-center gap-2 px-4 py-2 ${dark ? "bg-white/5" : "bg-gray-50"} border-b ${t.divider}`}>
+                          <span className="text-xs">🃏</span>
+                          <span className={`text-xs font-bold uppercase tracking-wider ${t.t3}`}>Product Cards</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${t.bar} ${t.t4}`}>{product.product_cards.length}</span>
                         </div>
                         <div className="overflow-x-auto">
                           <table className="w-full text-xs">
                             <thead>
-                              <tr className={`${t.bar}/60`}>
-                                <th className={`text-left px-3 py-2 font-semibold ${t.t3}`}>Status</th>
-                                <th className={`text-right px-3 py-2 font-semibold ${t.t3}`}>Cost</th>
-                                <th className={`text-right px-3 py-2 font-semibold ${t.t3}`}>SKU Orders</th>
-                                <th className={`text-right px-3 py-2 font-semibold ${t.t3}`}>Cost/Order</th>
-                                <th className={`text-right px-3 py-2 font-semibold ${t.t3}`}>Revenue</th>
-                                <th className={`text-right px-3 py-2 font-semibold ${t.t3}`}>ROI</th>
-                                <th className={`text-right px-3 py-2 font-semibold ${t.t3}`}>Impressions</th>
-                                <th className={`text-right px-3 py-2 font-semibold ${t.t3}`}>CTR</th>
-                                <th className={`text-right px-3 py-2 font-semibold ${t.t3}`}>CVR</th>
-                                <th className={`text-center px-3 py-2 font-semibold ${t.t3}`}>Badge</th>
+                              <tr className={dark ? "bg-slate-900/60" : "bg-gray-50/80"}>
+                                <th className={`text-right px-4 py-2 font-semibold ${t.t4}`}>Cost</th>
+                                <th className={`text-right px-3 py-2 font-semibold ${t.t4}`}>Orders</th>
+                                <th className={`text-right px-3 py-2 font-semibold ${t.t4}`}>Cost/Order</th>
+                                <th className={`text-right px-3 py-2 font-semibold ${t.t4}`}>Revenue</th>
+                                <th className={`text-right px-3 py-2 font-semibold ${t.t4}`}>ROI</th>
+                                <th className={`text-right px-3 py-2 font-semibold ${t.t4}`}>CTR</th>
+                                <th className={`text-center px-3 py-2 font-semibold ${t.t4}`}>Status</th>
+                                <th className={`text-center px-3 py-2 font-semibold ${t.t4}`}>Action</th>
                               </tr>
                             </thead>
                             <tbody>
                               {product.product_cards.map((c, i) => {
                                 const badge = getCreativeBadge(c);
+                                const rowBg = i % 2 === 1 ? (dark ? "bg-white/[0.02]" : "bg-gray-50/50") : "";
                                 return (
-                                  <tr key={c.id} className={`border-t ${t.divider} ${i % 2 === 1 ? `${t.bar}/30` : ""}`}>
-                                    <td className="px-3 py-2">
-                                      <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
-                                        c.status === "Delivering" ? "bg-green-100 text-green-700" :
-                                        c.status === "Excluded" ? "bg-red-100 text-red-700" :
-                                        "bg-gray-100 text-gray-500"
-                                      }`}>{c.status || "–"}</span>
-                                    </td>
-                                    <td className={`px-3 py-2 text-right font-mono ${t.t2}`}>${c.cost.toFixed(2)}</td>
-                                    <td className={`px-3 py-2 text-right font-semibold ${c.sku_orders > 0 ? "text-green-600" : t.t4}`}>{c.sku_orders}</td>
-                                    <td className={`px-3 py-2 text-right font-mono ${c.cost_per_order > 10 ? "text-red-600 font-bold" : c.cost_per_order < 1 && c.sku_orders > 0 ? "text-green-600 font-bold" : t.t2}`}>
+                                  <tr key={c.id} className={`border-t ${t.divider} ${rowBg}`}>
+                                    <td className={`px-4 py-2.5 text-right font-mono ${t.t2}`}>${c.cost.toFixed(2)}</td>
+                                    <td className={`px-3 py-2.5 text-right font-bold ${c.sku_orders > 0 ? "text-green-600" : t.t4}`}>{c.sku_orders || "–"}</td>
+                                    <td className={`px-3 py-2.5 text-right font-mono ${c.cost_per_order > 10 ? "text-red-600 font-bold" : c.cost_per_order > 0 && c.cost_per_order < 1 && c.sku_orders > 0 ? "text-green-600 font-bold" : t.t2}`}>
                                       {c.cost_per_order > 0 ? `$${c.cost_per_order.toFixed(2)}` : "–"}
                                     </td>
-                                    <td className={`px-3 py-2 text-right font-mono ${t.t2}`}>${c.gross_revenue.toFixed(2)}</td>
-                                    <td className={`px-3 py-2 text-right font-semibold ${c.roi >= 15 ? "text-green-600" : c.roi > 0 ? "text-amber-600" : t.t4}`}>
+                                    <td className={`px-3 py-2.5 text-right font-mono ${t.t2}`}>${c.gross_revenue.toFixed(2)}</td>
+                                    <td className={`px-3 py-2.5 text-right font-semibold ${c.roi >= 15 ? "text-green-600" : c.roi > 0 ? "text-amber-600" : t.t4}`}>
                                       {c.roi > 0 ? c.roi.toFixed(1) : "–"}
                                     </td>
-                                    <td className={`px-3 py-2 text-right ${t.t3}`}>{c.impressions > 0 ? c.impressions.toLocaleString() : "–"}</td>
-                                    <td className={`px-3 py-2 text-right ${t.t3}`}>{pct(c.click_rate)}</td>
-                                    <td className={`px-3 py-2 text-right ${t.t3}`}>{pct(c.conversion_rate)}</td>
-                                    <td className="px-3 py-2 text-center">
-                                      {badge && (
-                                        <span className={`px-2 py-0.5 rounded border text-[10px] font-semibold ${badge.cls}`}>
-                                          {badge.label}
+                                    <td className={`px-3 py-2.5 text-right ${t.t3}`}>{pct(c.click_rate)}</td>
+                                    <td className="px-3 py-2.5 text-center">
+                                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${statusCls(c.status)}`}>
+                                        {c.status || "–"}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2.5 text-center">
+                                      {badge ? (
+                                        <span className={`px-2 py-1 rounded-lg text-[10px] font-bold border ${badge.cls}`}>
+                                          {badge.label.includes("extra budget") ? "💰 Add Budget" :
+                                           badge.label.includes("Excluded")     ? "🚫 Exclude Now" :
+                                           "🔑 Get Auth Code"}
                                         </span>
-                                      )}
+                                      ) : <span className={`text-[10px] ${t.t5}`}>—</span>}
                                     </td>
                                   </tr>
                                 );
@@ -1111,19 +1207,27 @@ function AdsCreativeTab() {
         </div>
       )}
 
-      {/* Upload modal */}
+      {/* ── Upload modal ── */}
       {showUploadModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className={`${t.card} rounded-2xl p-6 w-[440px] shadow-2xl border ${t.divider}`}>
-            <h3 className={`text-lg font-bold mb-4 ${t.t1}`}>Upload Creative Data</h3>
-            {error && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded text-sm">{error}</div>}
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className={`${t.card} rounded-2xl p-6 w-full max-w-md shadow-2xl border ${t.divider}`}>
+            <div className="flex items-center justify-between mb-5">
+              <h3 className={`text-base font-bold ${t.t1}`}>Upload Creative Data</h3>
+              <button onClick={() => { setShowUploadModal(false); setError(""); }}
+                className={`${t.t4} hover:${t.t2} p-1.5 rounded-lg transition-colors`}>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+            {error && <div className="mb-3 p-2.5 bg-red-50 text-red-700 rounded-xl text-xs border border-red-200">{error}</div>}
             <div className="space-y-4">
               <div>
-                <label className={`block text-sm font-medium ${t.t2} mb-1`}>Store</label>
-                <div className={`flex gap-1 ${t.bar}/50 rounded-lg p-1 border ${t.divider}`}>
+                <label className={`block text-xs font-semibold ${t.t3} uppercase tracking-wider mb-2`}>Store</label>
+                <div className={`flex gap-1 ${t.bar}/50 rounded-xl p-1 border ${t.divider}`}>
                   {CREATIVE_STORES.map(s => (
                     <button key={s} onClick={() => setStore(s)}
-                      className={`flex-1 py-1.5 rounded text-sm font-semibold transition-all ${store === s ? "bg-violet-600 text-white" : `${t.t3}`}`}>
+                      className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${store === s ? "bg-violet-600 text-white shadow-sm" : `${t.t3}`}`}>
                       {s}
                     </button>
                   ))}
@@ -1131,40 +1235,54 @@ function AdsCreativeTab() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={`block text-sm font-medium ${t.t2} mb-1`}>Date From</label>
+                  <label className={`block text-xs font-semibold ${t.t3} uppercase tracking-wider mb-1.5`}>Date From</label>
                   <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-lg text-sm ${t.inp}`} />
+                    className={`w-full px-3 py-2 border rounded-xl text-sm ${t.inp}`} />
                 </div>
                 <div>
-                  <label className={`block text-sm font-medium ${t.t2} mb-1`}>Date To</label>
+                  <label className={`block text-xs font-semibold ${t.t3} uppercase tracking-wider mb-1.5`}>Date To</label>
                   <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-lg text-sm ${t.inp}`} />
+                    className={`w-full px-3 py-2 border rounded-xl text-sm ${t.inp}`} />
                 </div>
               </div>
               <div>
-                <label className={`block text-sm font-medium ${t.t2} mb-1`}>Creative Report Excel</label>
-                <input type="file" accept=".xlsx,.xls"
-                  onChange={e => setUploadFile(e.target.files?.[0] || null)}
-                  className={`w-full px-3 py-2 border rounded-lg text-sm ${t.inp}`} />
-                {uploadFile && <p className={`text-xs ${t.t4} mt-1`}>📎 {uploadFile.name}</p>}
+                <label className={`block text-xs font-semibold ${t.t3} uppercase tracking-wider mb-1.5`}>Creative Report Excel</label>
+                <label className={`flex items-center gap-3 px-4 py-3 border-2 border-dashed rounded-xl cursor-pointer transition-all ${
+                  uploadFile ? "border-violet-400 bg-violet-50" : `${t.divider} hover:border-violet-300`
+                }`}>
+                  <input type="file" accept=".xlsx,.xls" className="hidden"
+                    onChange={e => setUploadFile(e.target.files?.[0] || null)} />
+                  <span className="text-2xl">{uploadFile ? "📄" : "📁"}</span>
+                  <div>
+                    <div className={`text-sm font-medium ${uploadFile ? "text-violet-700" : t.t3}`}>
+                      {uploadFile ? uploadFile.name : "Click to select file"}
+                    </div>
+                    <div className={`text-[10px] ${t.t4} mt-0.5`}>
+                      {uploadFile ? `${(uploadFile.size/1024).toFixed(0)} KB` : ".xlsx / .xls"}
+                    </div>
+                  </div>
+                </label>
               </div>
-              <div className={`p-3 ${t.bar}/50 rounded-lg border ${t.divider} text-xs ${t.t3}`}>
-                <p className="font-semibold mb-1">💡 What gets imported:</p>
-                <ul className="space-y-0.5 list-disc list-inside">
-                  <li>All rows (Delivering + Authorization needed)</li>
-                  <li>Product # extracted from campaign name</li>
-                  <li>Videos and Product Cards separated automatically</li>
-                </ul>
+              <div className={`p-3 ${t.bar}/50 rounded-xl border ${t.divider} text-xs ${t.t3} space-y-1`}>
+                <p className="font-semibold">💡 What gets imported:</p>
+                <p>· All rows (Delivering + Authorization needed)</p>
+                <p>· Product # extracted from campaign name</p>
+                <p>· Videos and Product Cards separated automatically</p>
               </div>
             </div>
             <div className="flex gap-3 mt-5">
               <button onClick={() => { setShowUploadModal(false); setError(""); }}
-                className={`flex-1 px-4 py-2 border rounded-lg text-sm font-medium ${t.t3} ${t.btn}`}>
+                className={`flex-1 px-4 py-2.5 border rounded-xl text-sm font-medium ${t.t3} ${t.btn}`}>
                 Cancel
               </button>
-              <button onClick={handleUpload} disabled={uploading}
-                className="flex-1 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-semibold hover:bg-violet-700 disabled:opacity-50">
-                {uploading ? "Uploading..." : "Upload"}
+              <button onClick={handleUpload} disabled={uploading || !uploadFile || !dateFrom || !dateTo}
+                className="flex-1 px-4 py-2.5 bg-violet-600 text-white rounded-xl text-sm font-semibold hover:bg-violet-700 disabled:opacity-40 transition-all">
+                {uploading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"/>
+                    Uploading…
+                  </span>
+                ) : "Upload"}
               </button>
             </div>
           </div>
