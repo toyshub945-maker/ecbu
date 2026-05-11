@@ -95,12 +95,12 @@ function formatDateRange(record: AdRecord): string {
 }
 
 function getAdCostRateCellStyle(rate: number): React.CSSProperties {
-  if (rate <= 5)  return { backgroundColor: "#4CAF50", color: "#fff" };
-  if (rate <= 6)  return { backgroundColor: "#FFE0B2", color: "#BF360C" };
-  if (rate <= 7)  return { backgroundColor: "#FFCC80", color: "#E65100" };
-  if (rate <= 8)  return { backgroundColor: "#FFA726", color: "#fff" };
-  if (rate <= 9)  return { backgroundColor: "#FF7043", color: "#fff" };
-  return           { backgroundColor: "#F44336", color: "#fff" };
+  if (rate < 6)   return { backgroundColor: "#4CAF50", color: "#fff" };    // 5.x → green
+  if (rate < 7)   return { backgroundColor: "#FFE0B2", color: "#BF360C" }; // 6.x → light peach
+  if (rate < 8)   return { backgroundColor: "#FFCC80", color: "#E65100" }; // 7.x → peach-orange
+  if (rate < 9)   return { backgroundColor: "#FFA726", color: "#fff" };    // 8.x → amber
+  if (rate < 10)  return { backgroundColor: "#FF7043", color: "#fff" };    // 9.x → orange-red
+  return           { backgroundColor: "#F44336", color: "#fff" };           // 10+ → red
 }
 
 function getBudgetAdjustmentColor(adjustment: string, budget: number): string {
@@ -869,12 +869,12 @@ export default function AdsPage() {
 
         <div className={`mt-3 text-xs ${t.t3} flex flex-wrap gap-4`}>
           <span>💡 Click to edit • Enter to save • Tab to move right</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{background:"#4CAF50"}}></span> ≤5%</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{background:"#FFE0B2"}}></span> 6%</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{background:"#FFCC80"}}></span> 7%</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{background:"#FFA726"}}></span> 8%</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{background:"#FF7043"}}></span> 9%</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{background:"#F44336"}}></span> &gt;9%</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{background:"#4CAF50"}}></span> &lt;6%</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{background:"#FFE0B2"}}></span> 6–6.9%</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{background:"#FFCC80"}}></span> 7–7.9%</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{background:"#FFA726"}}></span> 8–8.9%</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{background:"#FF7043"}}></span> 9–9.9%</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{background:"#F44336"}}></span> ≥10%</span>
         </div>
       </div>
 
