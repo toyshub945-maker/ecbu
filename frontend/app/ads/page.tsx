@@ -462,11 +462,13 @@ export default function AdsPage() {
       <div className="flex gap-2 items-center">
         {mainView === "ads" && (
           <>
-            <button onClick={handleExport} className={`flex items-center gap-2 px-4 py-2 ${t.card} border ${t.divider} text-sm font-medium rounded-lg ${t.btn}`}>
-              📥 Export
+            <button onClick={handleExport} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border ${t.divider} ${t.card} ${t.t2} hover:opacity-80 transition-opacity`}>
+              <span>📥</span>
+              <span>Export</span>
             </button>
             <button onClick={() => setShowUpload(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-              📤 Upload Data
+              <span>📤</span>
+              <span>Upload Data</span>
             </button>
           </>
         )}
