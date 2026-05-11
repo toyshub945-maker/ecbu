@@ -304,6 +304,51 @@ CREATE TABLE IF NOT EXISTS monthly_targets (
     updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(year, month)
 );
+
+-- Ads Creative ──────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS creative_uploads (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_name   TEXT NOT NULL,
+    date_from    DATE NOT NULL,
+    date_to      DATE NOT NULL,
+    filename     TEXT,
+    row_count    INTEGER DEFAULT 0,
+    uploaded_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS creative_data (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    upload_id          INTEGER NOT NULL REFERENCES creative_uploads(id) ON DELETE CASCADE,
+    store_name         TEXT NOT NULL,
+    campaign_name      TEXT,
+    product_no         TEXT,
+    creative_type      TEXT,
+    video_title        TEXT,
+    video_id           TEXT,
+    tiktok_account     TEXT,
+    time_posted        TEXT,
+    status             TEXT,
+    authorization_type TEXT,
+    cost               REAL DEFAULT 0,
+    sku_orders         INTEGER DEFAULT 0,
+    cost_per_order     REAL DEFAULT 0,
+    gross_revenue      REAL DEFAULT 0,
+    roi                REAL DEFAULT 0,
+    impressions        INTEGER DEFAULT 0,
+    clicks             INTEGER DEFAULT 0,
+    click_rate         REAL DEFAULT 0,
+    conversion_rate    REAL DEFAULT 0,
+    view_2s            REAL,
+    view_6s            REAL,
+    view_25pct         REAL,
+    view_50pct         REAL,
+    view_75pct         REAL,
+    view_100pct        REAL
+);
+
+CREATE INDEX IF NOT EXISTS idx_creative_upload  ON creative_data(upload_id);
+CREATE INDEX IF NOT EXISTS idx_creative_store   ON creative_data(store_name);
+CREATE INDEX IF NOT EXISTS idx_creative_product ON creative_data(product_no);
 """
 
 
@@ -357,6 +402,30 @@ def init_db(db_path: str | None = None) -> None:
                 product_no TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(store_code, product_no)
+            )""",
+            # Ads Creative tables (new — created by IF NOT EXISTS above)
+            """CREATE TABLE IF NOT EXISTS creative_uploads (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                store_name TEXT NOT NULL,
+                date_from DATE NOT NULL,
+                date_to DATE NOT NULL,
+                filename TEXT,
+                row_count INTEGER DEFAULT 0,
+                uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )""",
+            """CREATE TABLE IF NOT EXISTS creative_data (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                upload_id INTEGER NOT NULL REFERENCES creative_uploads(id) ON DELETE CASCADE,
+                store_name TEXT NOT NULL,
+                campaign_name TEXT, product_no TEXT, creative_type TEXT,
+                video_title TEXT, video_id TEXT, tiktok_account TEXT,
+                time_posted TEXT, status TEXT, authorization_type TEXT,
+                cost REAL DEFAULT 0, sku_orders INTEGER DEFAULT 0,
+                cost_per_order REAL DEFAULT 0, gross_revenue REAL DEFAULT 0,
+                roi REAL DEFAULT 0, impressions INTEGER DEFAULT 0,
+                clicks INTEGER DEFAULT 0, click_rate REAL DEFAULT 0,
+                conversion_rate REAL DEFAULT 0, view_2s REAL, view_6s REAL,
+                view_25pct REAL, view_50pct REAL, view_75pct REAL, view_100pct REAL
             )""",
         ]
         for sql in migrations:

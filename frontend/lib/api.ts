@@ -116,6 +116,9 @@ export const api = {
   createProduct: (data: { product_no: string; warehouse_name?: string; image_url?: string; sku?: string }) =>
     request<{ ok: boolean }>("/products", { method: "POST", body: JSON.stringify(data) }),
 
+  getPeriodSelections: (store_code: string, period_id: number) =>
+    request<{ product_nos: string[] }>(`/board/period-selections?store_code=${store_code}&period_id=${period_id}`),
+
   pinProduct: (store_code: string, product_no: string) =>
     request<{ ok: boolean }>("/board/pin", { method: "POST", body: JSON.stringify({ store_code, product_no }) }),
 
@@ -258,4 +261,27 @@ export const api = {
     request<{ products: import("./types").PMProduct[] }>(`/product-manager/products${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   pmDetail: (product_no: string) =>
     request<import("./types").PMDetail>(`/product-manager/${encodeURIComponent(product_no)}`),
+
+  // Ads Creative
+  creativeUpload: (file: File, store_name: string, date_from: string, date_to: string) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("store_name", store_name);
+    fd.append("date_from", date_from);
+    fd.append("date_to", date_to);
+    return request<{ ok: boolean; upload_id: number; rows: number }>("/creative/upload", { method: "POST", body: fd });
+  },
+  creativeUploads: (store_name?: string) =>
+    request<{ uploads: { id: number; store_name: string; date_from: string; date_to: string; filename: string; row_count: number; uploaded_at: string }[] }>(
+      `/creative/uploads${store_name ? `?store_name=${store_name}` : ""}`
+    ),
+  deleteCreativeUpload: (upload_id: number) =>
+    request<{ ok: boolean }>(`/creative/uploads/${upload_id}`, { method: "DELETE" }),
+  creativeProducts: (store_name?: string, upload_id?: number) => {
+    const params = new URLSearchParams();
+    if (store_name) params.set("store_name", store_name);
+    if (upload_id)  params.set("upload_id", String(upload_id));
+    const qs = params.toString();
+    return request<{ products: any[] }>(`/creative/products${qs ? `?${qs}` : ""}`);
+  },
 };

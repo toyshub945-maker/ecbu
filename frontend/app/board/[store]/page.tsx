@@ -508,9 +508,9 @@ function NotesModal({
 
 // ─── Add Product modal ────────────────────────────────────────────────────────
 function AddProductModal({
-  storeCode, onClose, onAdded,
+  storeCode, periodId, onClose, onAdded,
 }: {
-  storeCode: string; onClose: () => void; onAdded: () => void;
+  storeCode: string; periodId: number | null; onClose: () => void; onAdded: () => void;
 }) {
   const { theme: t } = useTheme();
   const [tab, setTab] = useState<"search" | "manual">("search");
@@ -545,6 +545,14 @@ function AddProductModal({
     try {
       for (const pno of Array.from(selected)) {
         await api.pinProduct(storeCode, pno);
+        if (periodId) {
+          await api.updateBoardSelection({
+            period_id: periodId,
+            store_code: storeCode,
+            product_nos: [pno],
+            selected: true,
+          }).catch(() => {});
+        }
       }
       onAdded(); onClose();
     } catch (e: unknown) {
@@ -563,6 +571,14 @@ function AddProductModal({
         sku: manual.sku || undefined,
       });
       await api.pinProduct(storeCode, manual.product_no.trim());
+      if (periodId) {
+        await api.updateBoardSelection({
+          period_id: periodId,
+          store_code: storeCode,
+          product_nos: [manual.product_no.trim()],
+          selected: true,
+        }).catch(() => {});
+      }
       onAdded(); onClose();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Failed");
@@ -1362,23 +1378,36 @@ function EditUserModal({ user, onClose, onUpdated }: { user: User; onClose: () =
 
 // ─── Product Selection Panel ──────────────────────────────────────────────────
 function ProductSelectionPanel({
-  storeCode, periodId, selectedProductNos, onUpdated
+  storeCode, periodId, onUpdated
 }: {
-  storeCode: string; periodId: number; selectedProductNos: Set<string>; onUpdated: () => void;
+  storeCode: string; periodId: number; onUpdated: () => void;
 }) {
   const { theme: t } = useTheme();
   const [filter, setFilter] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
-  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [allProducts, setAllProducts] = useState<{ product_no: string; warehouse_name: string | null; image_url: string | null }[]>([]);
+  const [selectedNos, setSelectedNos] = useState<Set<string>>(new Set());
   const [loadingProducts, setLoadingProducts] = useState(true);
+  const [loadingSelected, setLoadingSelected] = useState(false);
 
+  // Load ALL products (no store filter) once — every product in the DB appears here
   useEffect(() => {
     setLoadingProducts(true);
-    api.allProducts(storeCode)
+    api.allProducts()
       .then(d => setAllProducts(d.products))
       .catch(() => setAllProducts([]))
       .finally(() => setLoadingProducts(false));
-  }, [storeCode]);
+  }, []);
+
+  // Reload which products are selected whenever the period changes
+  useEffect(() => {
+    if (!periodId) { setSelectedNos(new Set()); return; }
+    setLoadingSelected(true);
+    api.getPeriodSelections(storeCode, periodId)
+      .then(d => setSelectedNos(new Set(d.product_nos)))
+      .catch(() => setSelectedNos(new Set()))
+      .finally(() => setLoadingSelected(false));
+  }, [storeCode, periodId]);
 
   const filtered = allProducts.filter(p =>
     !filter || p.product_no.includes(filter) || (p.warehouse_name ?? "").toLowerCase().includes(filter.toLowerCase())
@@ -1387,13 +1416,30 @@ function ProductSelectionPanel({
   async function toggle(productNo: string, currentSelected: boolean) {
     if (!periodId) { alert("Please select a period first."); return; }
     setSaving(productNo);
+    const selecting = !currentSelected;
     try {
+      // 1. Create or remove product_tasks for this period
       await api.updateBoardSelection({
         period_id: periodId,
         store_code: storeCode,
         product_nos: [productNo],
-        selected: !currentSelected
+        selected: selecting,
       });
+      // 2. Pin when selecting so the product is visible on the board
+      //    regardless of its stores_available value.
+      //    Unpin when deselecting (ignore errors — may not have been pinned).
+      if (selecting) {
+        await api.pinProduct(storeCode, productNo).catch(() => {});
+      } else {
+        await api.unpinProduct(storeCode, productNo).catch(() => {});
+      }
+      // 3. Update local selected state immediately (optimistic)
+      setSelectedNos(prev => {
+        const next = new Set(prev);
+        if (selecting) next.add(productNo); else next.delete(productNo);
+        return next;
+      });
+      // 4. Reload the board tab in background
       onUpdated();
     } catch (e) {
       alert("Failed to update selection");
@@ -1402,10 +1448,12 @@ function ProductSelectionPanel({
     }
   }
 
+  const loading = loadingProducts || loadingSelected;
+
   return (
     <div className={`${t.card} rounded-xl overflow-hidden flex flex-col max-h-[70vh]`}>
       {!periodId && (
-        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-3 flex items-center gap-2 text-sm text-amber-400">
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-3 flex items-center gap-2 text-sm text-amber-600">
           <span>⚠️</span>
           <span>Select a period from the top bar before adding products to the board.</span>
         </div>
@@ -1413,7 +1461,14 @@ function ProductSelectionPanel({
       <div className={`p-4 border-b ${t.divider} ${t.bar}/50 flex items-center justify-between`}>
         <div>
           <h3 className={`font-bold ${t.t1}`}>Select Products for this Week</h3>
-          <p className={`text-xs ${t.t3}`}>Only selected products will appear on the Workflow Board.</p>
+          <p className={`text-xs ${t.t3}`}>
+            Only selected products will appear on the Workflow Board.
+            {!loading && (
+              <span className="ml-2 font-semibold text-violet-500">
+                {selectedNos.size} selected · {allProducts.length} total
+              </span>
+            )}
+          </p>
         </div>
         <input
           value={filter} onChange={e => setFilter(e.target.value)}
@@ -1422,35 +1477,62 @@ function ProductSelectionPanel({
         />
       </div>
       <div className="flex-1 overflow-y-auto p-2">
-        {loadingProducts && (
+        {loading && (
           <div className={`flex items-center justify-center py-16 ${t.t4} text-sm`}>Loading products...</div>
         )}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-          {!loadingProducts && filtered.map(p => {
-            const isSelected = selectedProductNos.has(p.product_no);
-            return (
-              <label key={p.product_no} className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${!periodId ? "cursor-not-allowed opacity-60" : "cursor-pointer"} ${isSelected ? `border-violet-400 ${t.accentSoft} ring-1 ring-violet-500/20` : `${t.divider} hover:${t.bar}`}`}>
-                <input
-                  type="checkbox"
-                  checked={isSelected}
-                  disabled={!!saving || !periodId}
-                  onChange={() => toggle(p.product_no, isSelected)}
-                  className="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500"
-                />
-                {p.image_url ? (
-                  <img src={p.image_url} alt="" className={`w-10 h-10 rounded-lg object-cover border ${t.divider} shrink-0`} />
-                ) : (
-                  <div className={`w-10 h-10 rounded-lg ${t.bar} shrink-0 flex items-center justify-center ${t.t5} text-xs font-bold`}>#{p.product_no}</div>
-                )}
-                <div className="min-w-0">
-                  <div className={`text-sm font-bold ${t.t1} leading-tight`}>#{p.product_no}</div>
-                  <div className={`text-[10px] ${t.t3} truncate mt-0.5`}>{p.warehouse_name || "No name"}</div>
-                </div>
-                {saving === p.product_no && <div className={`ml-auto ${t.accentTxt} text-xs font-bold`}>...</div>}
-              </label>
-            );
-          })}
-        </div>
+        {!loading && filtered.length === 0 && (
+          <div className={`flex items-center justify-center py-16 ${t.t4} text-sm`}>
+            {filter ? "No products match your search." : "No products found in the database."}
+          </div>
+        )}
+        {!loading && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+            {filtered.map(p => {
+              const isSelected = selectedNos.has(p.product_no);
+              const isSaving = saving === p.product_no;
+              return (
+                <label
+                  key={p.product_no}
+                  className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
+                    !periodId
+                      ? "cursor-not-allowed opacity-50"
+                      : isSaving
+                      ? "opacity-60 cursor-wait"
+                      : "cursor-pointer"
+                  } ${isSelected
+                    ? `border-violet-400 ${t.accentSoft} ring-1 ring-violet-500/20`
+                    : `${t.divider} hover:${t.bar}`
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    disabled={!!saving || !periodId}
+                    onChange={() => toggle(p.product_no, isSelected)}
+                    className="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 shrink-0"
+                  />
+                  {p.image_url ? (
+                    <img src={p.image_url} alt="" className={`w-10 h-10 rounded-lg object-cover border ${t.divider} shrink-0`} />
+                  ) : (
+                    <div className={`w-10 h-10 rounded-lg ${t.bar} shrink-0 flex items-center justify-center ${t.t5} text-xs font-bold`}>
+                      #{p.product_no}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className={`text-sm font-bold ${t.t1} leading-tight`}>#{p.product_no}</div>
+                    <div className={`text-[10px] ${t.t3} truncate mt-0.5`}>{p.warehouse_name || "No name"}</div>
+                  </div>
+                  {isSaving && (
+                    <svg className={`w-4 h-4 ${t.accentTxt} animate-spin shrink-0`} fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  )}
+                </label>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1762,9 +1844,10 @@ function DataUploadPanel({
                             } catch (e: any) { alert(`Failed to delete: ${e.message}`); }
                           }
                         }} 
-                        className="text-red-400 hover:text-red-600 font-medium ml-2 px-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Delete this upload"
+                        className="text-red-400 hover:text-red-600 ml-2 p-1 rounded shrink-0 hover:bg-red-50 transition-colors"
                       >
-                        delete
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                       </button>
                     </div>
                   ))}
@@ -1823,9 +1906,10 @@ function DataUploadPanel({
                             catch (e: any) { alert(`Failed to delete: ${e.message}`); }
                           }
                         }} 
-                        className="text-red-400 hover:text-red-600 font-medium ml-2 px-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Delete this upload"
+                        className="text-red-400 hover:text-red-600 ml-2 p-1 rounded shrink-0 hover:bg-red-50 transition-colors"
                       >
-                        delete
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                       </button>
                     </div>
                   ))}
@@ -2409,7 +2493,6 @@ export default function BoardPage() {
             <ProductSelectionPanel
               storeCode={storeCode}
               periodId={selectedPeriodId ?? 0}
-              selectedProductNos={new Set(board?.products.map(p => p.product_no) ?? [])}
               onUpdated={loadBoard}
             />
           ) : tab === "progress" ? (
@@ -2473,11 +2556,24 @@ export default function BoardPage() {
                         onUpdated={loadBoard} onNotes={() => setNotesProduct(product)}
                         onMetrics={() => setMetricsProduct(product)}
                         onHide={async () => {
-                          if (confirm("Remove this product from the board? It will be permanently hidden from this store until restored.")) {
+                          if (confirm("Remove this product from this week's board?")) {
                             try {
-                              await api.excludeProduct(storeCode, product.product_no);
-                              // Instantly remove from local state so UI updates immediately
-                              setBoard(prev => prev ? { ...prev, products: prev.products.filter(p => p.product_no !== product.product_no) } : prev);
+                              // Delete tasks for this period — the board only shows
+                              // products that have tasks, so this is guaranteed to
+                              // remove the product and keep it gone after refresh.
+                              await api.updateBoardSelection({
+                                period_id: selectedPeriodId!,
+                                store_code: storeCode,
+                                product_nos: [product.product_no],
+                                selected: false,
+                              });
+                              // Also remove any pin so it doesn't linger via board_pins
+                              await api.unpinProduct(storeCode, product.product_no).catch(() => {});
+                              // Instantly remove from local state
+                              setBoard(prev => prev
+                                ? { ...prev, products: prev.products.filter(p => p.product_no !== product.product_no) }
+                                : prev
+                              );
                             } catch (e: any) {
                               alert(`Failed to remove product: ${e.message}`);
                             }
@@ -2566,7 +2662,7 @@ export default function BoardPage() {
           onCreated={p => { setPeriods(prev => [p, ...prev]); setSelectedPeriodId(p.id); }} />
       )}
       {showAddProduct && (
-        <AddProductModal storeCode={storeCode} onClose={() => setShowAddProduct(false)}
+        <AddProductModal storeCode={storeCode} periodId={selectedPeriodId} onClose={() => setShowAddProduct(false)}
           onAdded={() => { loadBoard(); }} />
       )}
       {notesProduct && (

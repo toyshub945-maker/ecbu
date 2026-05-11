@@ -186,8 +186,25 @@ function UploadPanel({ onClose, onUploaded, t }: { onClose: () => void; onUpload
                       <div className={`text-xs font-semibold ${t.t2}`}>{h.period_start} → {h.period_end}</div>
                       <div className={`text-[10px] ${t.t4} mt-0.5`}>{h.product_count} products · ${h.total_gmv?.toFixed(0) ?? "—"} GMV</div>
                     </div>
-                    <div className={`text-[10px] ${t.t4}`}>
+                    <div className={`text-[10px] ${t.t4} flex items-center gap-2`}>
                       {new Date(h.imported_at).toLocaleDateString(undefined,{month:"short",day:"numeric"})}
+                      <button 
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (!confirm("Delete this upload?")) return;
+                          try {
+                            await api.deleteTiktokExport(store, h.period_start, h.period_end);
+                            loadHistory();
+                            onUploaded();
+                          } catch (err: any) {
+                            alert(err.message || "Failed to delete");
+                          }
+                        }}
+                        className={`text-red-500 hover:text-red-700 p-1 rounded transition-colors ${themeKey !== "light" ? "hover:bg-red-500/20" : "hover:bg-red-50"}`}
+                        title="Delete this upload"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -364,31 +381,39 @@ function StockSection({ stock, t }: { stock: PMDetail["stock"]; t: ThemeDef }) {
         </div>
       </div>
 
-      <div className="grid gap-5">
-        {stock.groups.map(g => (
-          <div key={g.sheet_name} className={`${t.card} rounded-3xl border ${t.divider} overflow-hidden shadow-sm`}>
-            <div className={`flex items-center justify-between px-5 py-3.5 border-b ${t.divider} ${themeKey !== "light" ? "bg-slate-800/50" : "bg-gray-50/80"}`}>
+      <div className="space-y-6">
+        {stock.groups.map((g, idx) => (
+          <div key={idx} className={`${t.card} rounded-2xl border ${t.divider} overflow-hidden shadow-sm`}>
+            <div className={`px-4 py-3 ${themeKey !== "light" ? "bg-white/5" : "bg-gray-50/80"} border-b ${t.divider} flex items-center justify-between`}>
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-blue-500" />
-                <span className={`text-xs font-black uppercase tracking-wider ${t.t2}`}>{g.sheet_name}</span>
+                <span className="text-lg">📦</span>
+                <h3 className={`font-bold ${t.t1}`}>{g.sheet_name}</h3>
               </div>
-              <div className={`text-xs font-bold ${t.t1}`}>{g.total.toLocaleString()} <span className={t.t4}>total</span></div>
+              <div className={`text-xs font-bold ${t.t3}`}>
+                Total: <span className={t.t1}>{g.total.toLocaleString()}</span> units
+              </div>
             </div>
             
-            <div className="p-2">
-              <div className="grid border border-transparent rounded-2xl overflow-hidden">
-                <div className={`grid grid-cols-[1fr_80px_100px_80px] px-4 py-2 text-[10px] font-black uppercase tracking-widest ${t.t4} border-b ${t.divider}`}>
-                  <div>Color / Variant</div>
+            <div className="overflow-x-auto">
+              <div className="min-w-[500px]">
+                {/* Header */}
+                <div className={`grid grid-cols-[1.5fr_100px_140px_100px] px-4 py-2 text-[10px] font-black uppercase tracking-wider ${t.t4} bg-opacity-50 border-b ${t.divider}`}>
+                  <div>Color / Variant / SKU</div>
                   <div className="text-right">Stock</div>
-                  <div className="px-4 text-center">Share</div>
-                  <div className="text-right">Status</div>
+                  <div className="px-4 text-center">Share %</div>
+                  <div className="text-right pr-2">Status</div>
                 </div>
                 
+                {/* Rows */}
                 {g.variants.map((v, i) => (
-                  <div key={i} className={`grid grid-cols-[1fr_80px_100px_80px] items-center px-4 py-3 border-b last:border-0 ${t.divider} hover:${themeKey !== "light" ? "bg-white/5" : "bg-gray-50/50"} transition-colors`}>
-                    <div className="min-w-0">
-                      <div className={`text-xs font-bold ${t.t2} truncate`}>{v.warehouse_name || v.sku}</div>
-                      <div className={`text-[10px] ${t.t4} font-medium mt-0.5 truncate opacity-60`}>{v.sku}</div>
+                  <div key={i} className={`grid grid-cols-[1.5fr_100px_140px_100px] items-center px-4 py-3 border-b last:border-0 ${t.divider} hover:${themeKey !== "light" ? "bg-white/5" : "bg-gray-50/50"} transition-all`}>
+                    <div className="min-w-0 pr-4">
+                      <div className={`text-xs font-bold ${t.t1} truncate mb-0.5`}>
+                        {v.warehouse_name || "Unknown Warehouse"}
+                      </div>
+                      <div className={`text-[10px] font-mono ${t.t4} truncate opacity-70`}>
+                        {v.sku}
+                      </div>
                     </div>
                     
                     <div className="text-right">
@@ -398,20 +423,28 @@ function StockSection({ stock, t }: { stock: PMDetail["stock"]; t: ThemeDef }) {
                     </div>
 
                     <div className="px-4">
-                      <div className="flex items-center gap-2">
-                        <div className={`flex-1 h-1 ${t.bar} rounded-full overflow-hidden`}>
+                      <div className="flex items-center gap-3">
+                        <div className={`flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden`}>
                           <div 
-                            className={`h-full rounded-full ${v.stock === 0 ? "bg-red-400" : "bg-blue-500"}`} 
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              v.stock === 0 ? "bg-red-400" : 
+                              v.stock < 10 ? "bg-amber-400" : 
+                              "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]"
+                            }`} 
                             style={{ width: `${v.percent}%` }}
                           />
                         </div>
-                        <span className={`text-[10px] font-bold ${t.t4} w-8 text-right`}>{v.percent}%</span>
+                        <span className={`text-[10px] font-black ${t.t2} w-9 text-right`}>{v.percent}%</span>
                       </div>
                     </div>
 
-                    <div className="text-right">
-                      <span className={`text-[10px] font-black uppercase ${
-                        v.stock === 0 ? "text-red-500" : v.stock < 10 ? "text-amber-500" : "text-emerald-500"
+                    <div className="text-right pr-2">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-tighter ${
+                        v.stock === 0 
+                          ? "bg-red-100 text-red-700" 
+                          : v.stock < 10 
+                            ? "bg-amber-100 text-amber-700" 
+                            : "bg-emerald-100 text-emerald-700"
                       }`}>
                         {v.stock === 0 ? "Empty" : v.stock < 10 ? "Critical" : "Good"}
                       </span>

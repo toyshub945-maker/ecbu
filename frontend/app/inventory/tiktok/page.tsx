@@ -3,6 +3,9 @@ import { useState, useRef, useEffect } from "react";
 import { useTheme } from "@/components/ThemeProvider";
 
 function backendUrl(path: string) {
+  if (process.env.NEXT_PUBLIC_BACKEND_URL) {
+    return `${process.env.NEXT_PUBLIC_BACKEND_URL}${path}`;
+  }
   const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
   return `http://${host}:8000${path}`;
 }

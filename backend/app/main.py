@@ -134,11 +134,6 @@ def delete_user(user_id: int, current_user: dict = Depends(auth.require_admin)):
 
 # ─── Stores ──────────────────────────────────────────────────────────────────
 
-@app.get("/api/health")
-def health_check():
-    return {"status": "ok"}
-
-
 @app.get("/api/stores")
 def list_stores():
     return {"stores": config.STORES}
@@ -398,44 +393,31 @@ def get_board(store_code: str, period_id: int, current_user: dict | None = None)
         if not period:
             raise HTTPException(404, "Period not found")
 
-        # Load excluded product nos for this store
-        cur.execute("SELECT product_no FROM board_exclusions WHERE store_code=?", (store_code,))
-        excluded_nos = {r[0] for r in cur.fetchall()}
-
-        # Load products for this store (Feishu-filtered + manually pinned, minus exclusions)
+        # Load only products that have tasks for this period.
+        # A product appears on the board IF AND ONLY IF it has tasks for this
+        # period+store. Deleting tasks (via the trash button) is the canonical
+        # way to remove a product — it will never reappear after refresh because
+        # there are no tasks to load. No store-pool filtering or exclusion tables
+        # are needed for this logic.
         cur.execute("""
-            SELECT * FROM (
-                SELECT DISTINCT p.* FROM products p
-                WHERE (
-                    p.stores_available IS NULL
-                    OR UPPER(p.stores_available) LIKE '%ALL%'
-                    OR p.stores_available LIKE ?
-                    OR p.stores_available LIKE ?
-                    OR p.stores_available = 'MANUAL'
-                )
-                UNION
-                SELECT p.* FROM products p
-                JOIN board_pins bp ON p.product_no = bp.product_no AND bp.store_code = ?
-            ) ORDER BY sort_order ASC, CAST(product_no AS INTEGER) ASC
-        """, (f"%TK{store_code[-1]}%", f"%TK {store_code[-1]}%", store_code))
-        all_products = [dict(r) for r in cur.fetchall()]
-
-        # Filter to this store (keeps pinned products even if stores_available doesn't match)
-        # Also remove any explicitly excluded products
-        cur.execute("SELECT product_no FROM board_pins WHERE store_code=?", (store_code,))
-        pinned_nos = {r[0] for r in cur.fetchall()}
-
-        products = [
-            p for p in all_products
-            if p["product_no"] not in excluded_nos
-            and (p["product_no"] in pinned_nos or _product_in_store(p["stores_available"], store_code))
-        ]
-        if not products and all_products:
-            products = [p for p in all_products if p["product_no"] not in excluded_nos]
+            SELECT DISTINCT p.*
+            FROM products p
+            INNER JOIN product_tasks t ON p.product_no = t.product_no
+            WHERE t.period_id = ? AND t.store_code = ?
+            ORDER BY p.sort_order ASC, CAST(p.product_no AS INTEGER) ASC
+        """, (period_id, store_code))
+        products = [dict(r) for r in cur.fetchall()]
 
         product_nos = [p["product_no"] for p in products]
         if not product_nos:
-            return {"period": dict(period), "products": [], "users": []}
+            return {
+                "period": dict(period),
+                "products": [],
+                "all_store_products": [],
+                "users": [],
+                "task_types": config.TASK_TYPES,
+                "task_labels": config.TASK_LABELS,
+            }
 
         placeholders = ",".join("?" * len(product_nos))
 
@@ -516,26 +498,25 @@ def get_board(store_code: str, period_id: int, current_user: dict | None = None)
     notes_by_product = {dict(r)["product_no"]: dict(r) for r in notes_rows}
     tk_export_by_product = {dict(r)["product_no"]: dict(r) for r in tk_export_rows}
 
-    result_products = []
-    for p in products:
-        pno = p["product_no"]
-        if pno not in tasks_by_product:
-            continue
-            
-        result_products.append({
+    # All products in `products` already have tasks (INNER JOIN above),
+    # so no need to skip products missing from tasks_by_product.
+    result_products = [
+        {
             **p,
-            "tasks": tasks_by_product.get(pno, {}),
-            "analytics": analytics_by_product.get(pno, {}),
-            "notes": notes_by_product.get(pno, {}),
-            "tk_export": tk_export_by_product.get(pno),
-        })
-        
+            "tasks": tasks_by_product.get(p["product_no"], {}),
+            "analytics": analytics_by_product.get(p["product_no"], {}),
+            "notes": notes_by_product.get(p["product_no"], {}),
+            "tk_export": tk_export_by_product.get(p["product_no"]),
+        }
+        for p in products
+    ]
+
     result_products.sort(key=lambda x: (x.get("sort_order", 0) or 0, int(x["product_no"]) if str(x["product_no"]).isdigit() else 9999))
 
     return {
         "period": dict(period),
         "products": result_products,
-        "all_store_products": products,
+        "all_store_products": products,   # kept for API compatibility
         "users": users,
         "task_types": config.TASK_TYPES,
         "task_labels": config.TASK_LABELS,
@@ -1272,6 +1253,17 @@ def list_pins(store_code: str, _: dict = Depends(auth.get_current_user)):
     with db.db_cursor() as cur:
         cur.execute("SELECT product_no FROM board_pins WHERE store_code=?", (store_code,))
         return {"pins": [r[0] for r in cur.fetchall()]}
+
+
+@app.get("/api/board/period-selections")
+def get_period_selections(store_code: str, period_id: int, _: dict = Depends(auth.get_current_user)):
+    """Return product_nos that have tasks for a specific store+period (true selected state)."""
+    with db.db_cursor() as cur:
+        cur.execute(
+            "SELECT DISTINCT product_no FROM product_tasks WHERE store_code=? AND period_id=?",
+            (store_code, period_id),
+        )
+        return {"product_nos": [r[0] for r in cur.fetchall()]}
 
 
 # ─── Board exclusions (persistent hide / delete from board) ───────────────────
@@ -2540,6 +2532,182 @@ def export_ads(store: str | None = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ─── Ads Creative ─────────────────────────────────────────────────────────────
+
+import re as _re_creative
+
+@app.post("/api/creative/upload", status_code=201)
+async def upload_creative(
+    file: UploadFile = File(...),
+    store_name: str = Form(...),
+    date_from:  str = Form(...),
+    date_to:    str = Form(...),
+    _: dict = Depends(auth.get_current_user),
+):
+    import openpyxl, io
+    contents = await file.read()
+    wb = openpyxl.load_workbook(io.BytesIO(contents), data_only=True)
+    ws = wb.active
+
+    headers = [str(cell.value).strip() if cell.value is not None else "" for cell in ws[1]]
+
+    COL_MAP = {
+        "Campaign name":                  "campaign_name",
+        "Creative type":                  "creative_type",
+        "Video title":                    "video_title",
+        "Video ID":                       "video_id",
+        "TikTok account":                 "tiktok_account",
+        "Time posted":                    "time_posted",
+        "Status":                         "status",
+        "Authorization type":             "authorization_type",
+        "Cost":                           "cost",
+        "SKU orders":                     "sku_orders",
+        "Cost per order":                 "cost_per_order",
+        "Gross revenue":                  "gross_revenue",
+        "ROI":                            "roi",
+        "Product ad impressions":         "impressions",
+        "Product ad clicks":              "clicks",
+        "Product ad click rate":          "click_rate",
+        "Ad conversion rate":             "conversion_rate",
+        "2-second ad video view rate":    "view_2s",
+        "6-second ad video view rate":    "view_6s",
+        "25% ad video view rate":         "view_25pct",
+        "50% ad video view rate":         "view_50pct",
+        "75% ad video view rate":         "view_75pct",
+        "100% ad video view rate":        "view_100pct",
+    }
+    col_idx = {COL_MAP[h]: i for i, h in enumerate(headers) if h in COL_MAP}
+
+    def _f(row, key, default=0.0):
+        i = col_idx.get(key)
+        if i is None or row[i] is None: return default
+        try: return float(row[i])
+        except: return default
+
+    def _i(row, key):
+        i = col_idx.get(key)
+        if i is None or row[i] is None: return 0
+        try: return int(float(row[i]))
+        except: return 0
+
+    def _s(row, key):
+        i = col_idx.get(key)
+        if i is None or row[i] is None: return None
+        v = str(row[i]).strip()
+        return None if v in ("", "-", "None", "nan", "NaN") else v
+
+    def _pct(row, key):
+        i = col_idx.get(key)
+        if i is None or row[i] is None: return None
+        try:
+            v = row[i]
+            if isinstance(v, str) and v.strip() in ("-", "nan", "NaN", ""): return None
+            return float(v)
+        except: return None
+
+    rows_to_insert = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if all(c is None for c in row): continue
+        campaign_name = _s(row, "campaign_name") or ""
+        m = _re_creative.search(r"(?i)product\s+(\d+)", campaign_name)
+        product_no = m.group(1) if m else None
+        rows_to_insert.append((
+            store_name, campaign_name, product_no,
+            _s(row, "creative_type"), _s(row, "video_title"), _s(row, "video_id"),
+            _s(row, "tiktok_account"), _s(row, "time_posted"),
+            _s(row, "status"), _s(row, "authorization_type"),
+            _f(row, "cost"), _i(row, "sku_orders"), _f(row, "cost_per_order"),
+            _f(row, "gross_revenue"), _f(row, "roi"),
+            _i(row, "impressions"), _i(row, "clicks"),
+            _pct(row, "click_rate"), _pct(row, "conversion_rate"),
+            _pct(row, "view_2s"), _pct(row, "view_6s"),
+            _pct(row, "view_25pct"), _pct(row, "view_50pct"),
+            _pct(row, "view_75pct"), _pct(row, "view_100pct"),
+        ))
+
+    with db.db_cursor() as cur:
+        cur.execute(
+            "INSERT INTO creative_uploads (store_name, date_from, date_to, filename, row_count) VALUES (?,?,?,?,?)",
+            (store_name, date_from, date_to, file.filename, len(rows_to_insert)),
+        )
+        upload_id = cur.lastrowid
+        cur.executemany("""
+            INSERT INTO creative_data (
+                upload_id, store_name, campaign_name, product_no, creative_type,
+                video_title, video_id, tiktok_account, time_posted, status,
+                authorization_type, cost, sku_orders, cost_per_order, gross_revenue,
+                roi, impressions, clicks, click_rate, conversion_rate,
+                view_2s, view_6s, view_25pct, view_50pct, view_75pct, view_100pct
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, [(upload_id, *r) for r in rows_to_insert])
+
+    return {"ok": True, "upload_id": upload_id, "rows": len(rows_to_insert)}
+
+
+@app.get("/api/creative/uploads")
+def list_creative_uploads(store_name: Optional[str] = None, _: dict = Depends(auth.get_current_user)):
+    with db.db_cursor() as cur:
+        if store_name:
+            cur.execute("SELECT * FROM creative_uploads WHERE store_name=? ORDER BY uploaded_at DESC", (store_name,))
+        else:
+            cur.execute("SELECT * FROM creative_uploads ORDER BY uploaded_at DESC")
+        return {"uploads": [dict(r) for r in cur.fetchall()]}
+
+
+@app.delete("/api/creative/uploads/{upload_id}")
+def delete_creative_upload(upload_id: int, _: dict = Depends(auth.get_current_user)):
+    with db.db_cursor() as cur:
+        cur.execute("DELETE FROM creative_uploads WHERE id=?", (upload_id,))
+    return {"ok": True}
+
+
+@app.get("/api/creative/products")
+def get_creative_products(
+    store_name: Optional[str] = None,
+    upload_id:  Optional[int] = None,
+    _: dict = Depends(auth.get_current_user),
+):
+    with db.db_cursor() as cur:
+        wheres, params = [], []
+        if store_name: wheres.append("d.store_name=?"); params.append(store_name)
+        if upload_id:  wheres.append("d.upload_id=?");  params.append(upload_id)
+        where = ("WHERE " + " AND ".join(wheres)) if wheres else ""
+        cur.execute(f"""
+            SELECT d.*, p.warehouse_name, p.image_url
+            FROM creative_data d
+            LEFT JOIN products p ON p.product_no = d.product_no
+            {where}
+            ORDER BY d.product_no ASC, d.creative_type ASC, d.roi DESC
+        """, params)
+        rows = [dict(r) for r in cur.fetchall()]
+
+    # Group by product_no
+    products: dict = {}
+    for r in rows:
+        pno = r["product_no"] or "unknown"
+        if pno not in products:
+            products[pno] = {
+                "product_no": pno,
+                "campaign_name": r["campaign_name"],
+                "warehouse_name": r.get("warehouse_name"),
+                "image_url": r.get("image_url"),
+                "videos": [],
+                "product_cards": [],
+            }
+        entry = {k: r[k] for k in (
+            "id","creative_type","video_title","video_id","tiktok_account","time_posted",
+            "status","authorization_type","cost","sku_orders","cost_per_order",
+            "gross_revenue","roi","impressions","clicks","click_rate","conversion_rate",
+            "view_2s","view_6s","view_25pct","view_50pct","view_75pct","view_100pct",
+        )}
+        if r["creative_type"] == "Video":
+            products[pno]["videos"].append(entry)
+        else:
+            products[pno]["product_cards"].append(entry)
+
+    return {"products": list(products.values())}
+
+
 # ─── Product Manager ──────────────────────────────────────────────────────────
 
 def _pm_perf(orders: int) -> str:
@@ -2729,13 +2897,26 @@ def pm_product_detail(product_no: str, _: dict = Depends(auth.get_current_user))
             sheet = s["sheet_name"] or "Default"
             if sheet not in stock_groups:
                 stock_groups[sheet] = {"sheet_name": sheet, "variants": [], "total": 0}
+            
             qty = s["stock_quantity"] or 0
             stock_groups[sheet]["variants"].append({
-                "sku": s["sku"], "warehouse_name": s["warehouse_name"],
-                "stock": qty, "availability": s["availability"],
+                "sku": s["sku"], 
+                "warehouse_name": s["warehouse_name"],
+                "stock": qty, 
+                "availability": s["availability"],
+                "percent": 0 # Placeholder
             })
             stock_groups[sheet]["total"] += qty
             total_stock += qty
+
+        # Calculate percentages per group
+        for g in stock_groups.values():
+            gt = g["total"]
+            for v in g["variants"]:
+                if gt > 0:
+                    v["percent"] = round((v["stock"] / gt) * 100, 1)
+                else:
+                    v["percent"] = 0
 
         # Pricing
         STORE_COLS = {"TK1": ("tt1_price","tt1_price_max"), "TK2": ("tt2_price","tt2_price_max"),
