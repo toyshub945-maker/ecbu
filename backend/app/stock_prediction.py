@@ -151,9 +151,26 @@ def _enrich_from_db(skus: list[dict]) -> None:
     Mutates each sku dict in-place, overriding:
       - current_stock  → SUM(stock_quantity) from warehouse_inventory grouped by sku
       - selling_price  → average of tt1-tt4 prices from products table (matched by product_no)
+      - profit_margin  → computed using the SAME formula as the Pricing tab:
+                          cost_usd = cost_rmb / 7 + 1.5 (first_mile) + 9.5 (last_mile)
+                          profit_with_ads = 1 - cost_usd/price - warehouse(3%) - tiktok(8%)
+                                              - refund(10%) - affiliate(13%) - ads(5%)
       - rr_rate        → return_qty / order_qty from rr tables (case-insensitive msku match)
-    profit_margin is kept from the Excel as the DB has no reliable source.
     """
+    # ── Pricing tab constants (must match main.py /api/pricing) ──────────────
+    EXCHANGE_RATE = 7.0
+    FIRST_MILE    = 1.5
+    LAST_MILE     = 9.5
+    FIXED_FEES    = 0.03 + 0.08 + 0.10 + 0.13   # warehouse + tiktok + refund + affiliate
+    ADS           = 0.05
+
+    def _calc_margin(cost_rmb: float, price_usd: float) -> float | None:
+        if not price_usd or price_usd <= 0 or not cost_rmb or cost_rmb <= 0:
+            return None
+        cost_usd = cost_rmb / EXCHANGE_RATE + FIRST_MILE + LAST_MILE
+        cost_pct = cost_usd / price_usd
+        return round((1 - cost_pct - FIXED_FEES - ADS), 4)   # same as profit_with_ads / 100
+
     try:
         with db.db_cursor() as cur:
             # ── 1. Warehouse stock by SKU ─────────────────────────────────────
@@ -167,18 +184,25 @@ def _enrich_from_db(skus: list[dict]) -> None:
                 for row in cur.fetchall()
             }
 
-            # ── 2. Product selling price by product_no ────────────────────────
+            # ── 2. Selling price + profit margin from products table ──────────
+            #    Uses same formula as Pricing tab in main.py
             cur.execute("""
-                SELECT product_no,
-                       COALESCE(tt1_price, tt2_price, tt3_price, tt4_price) as price1,
+                SELECT product_no, cost,
                        tt1_price, tt2_price, tt3_price, tt4_price
                 FROM products
             """)
-            product_prices: dict[str, float] = {}
+            product_prices: dict[str, float] = {}   # product_no → avg price
+            product_margins: dict[str, float] = {}  # product_no → profit_with_ads (0-1)
             for row in cur.fetchall():
                 prices = [row[f"tt{i}_price"] for i in range(1, 5) if row[f"tt{i}_price"]]
-                if prices:
-                    product_prices[str(row["product_no"])] = round(sum(prices) / len(prices), 2)
+                if not prices:
+                    continue
+                avg_price = sum(prices) / len(prices)
+                product_prices[str(row["product_no"])] = round(avg_price, 2)
+                if row["cost"]:
+                    margin = _calc_margin(row["cost"], avg_price)
+                    if margin is not None:
+                        product_margins[str(row["product_no"])] = margin
 
             # ── 3. R&R rate by msku (case-insensitive) ────────────────────────
             cur.execute("""
@@ -215,6 +239,13 @@ def _enrich_from_db(skus: list[dict]) -> None:
                 s["price_source"] = "products_db"
             else:
                 s["price_source"] = "excel"
+
+            # Profit margin from Pricing tab formula (override Excel value)
+            if prod_no in product_margins:
+                s["profit_margin"] = product_margins[prod_no]
+                s["margin_source"] = "pricing_db"
+            else:
+                s["margin_source"] = "excel"
 
             # R&R rate from rr tables (override Excel value if found)
             if sku_lower in rr_map:

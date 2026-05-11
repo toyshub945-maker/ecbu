@@ -26,6 +26,7 @@ type SkuRow = {
   // source indicators
   stock_source?: "warehouse_db" | "excel";
   price_source?: "products_db" | "excel";
+  margin_source?: "pricing_db" | "excel";
   rr_source?: "rr_db" | "excel";
 };
 
@@ -325,6 +326,7 @@ export default function StockPredictionPage() {
                   {(() => {
                     const wh = parsedData.skus.filter(s => s.stock_source === "warehouse_db").length;
                     const pr = parsedData.skus.filter(s => s.price_source === "products_db").length;
+                    const mg = parsedData.skus.filter(s => s.margin_source === "pricing_db").length;
                     return (
                       <>
                         <div className="flex items-center gap-1.5">
@@ -336,8 +338,12 @@ export default function StockPredictionPage() {
                           <span>Price: {pr > 0 ? `${pr} SKUs from Products DB` : "from Excel"}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
+                          <span className={`w-2 h-2 rounded-full ${mg > 0 ? "bg-violet-500" : "bg-gray-400"}`}/>
+                          <span>Profit Margin: {mg > 0 ? `${mg} SKUs from Pricing tab` : "from Excel"}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
                           <span className="w-2 h-2 rounded-full bg-orange-400"/>
-                          <span>Profit Margin / R&R: from Excel</span>
+                          <span>R&R Rate: from Excel</span>
                         </div>
                       </>
                     );
@@ -705,6 +711,9 @@ export default function StockPredictionPage() {
                                   {sku.profit_margin > 0 ? (
                                     <span style={{ color: "#059669" }}>
                                       {(sku.profit_margin * 100).toFixed(1)}%
+                                      {sku.margin_source === "pricing_db" && (
+                                        <span className="ml-1 text-[9px] text-violet-500">●</span>
+                                      )}
                                     </span>
                                   ) : <span className={`${t.t5} text-[10px]`}>—</span>}
                                 </td>
