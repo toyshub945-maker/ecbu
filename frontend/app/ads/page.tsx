@@ -771,6 +771,7 @@ function AdsCreativeTab() {
   const [productSearch, setProductSearch] = useState("");
   const [authOrdersOnly, setAuthOrdersOnly] = useState(false);
   const [trendingFilter, setTrendingFilter] = useState<Set<string>>(new Set());
+  const [performingFilter, setPerformingFilter] = useState<Set<string>>(new Set());
 
   const dark = themeKey !== "light";
 
@@ -1313,10 +1314,14 @@ function AdsCreativeTab() {
                       const isPerformingVid = (v: CreativeEntry) => v.sku_orders > 0 && !(v.cost_per_order > 0 && v.cost_per_order < 1);
                       const trendingCount  = product.videos.filter(isTrendingVid).length;
                       const performingCount = product.videos.filter(isPerformingVid).length;
-                      const isTrendingOn   = trendingFilter.has(product.product_no);
+                      const isTrendingOn    = trendingFilter.has(product.product_no);
+                      const isPerformingOn  = performingFilter.has(product.product_no);
                       const displayedVideos = isTrendingOn
                         ? product.videos.filter(isTrendingVid)
-                        : product.videos;
+                        : isPerformingOn
+                          ? product.videos.filter(isPerformingVid)
+                          : product.videos;
+                      const activeFilterCount = isTrendingOn ? trendingCount : isPerformingOn ? performingCount : product.videos.length;
 
                       return (
                         <div className={product.product_cards.length > 0 ? `border-t ${t.divider}` : ""}>
@@ -1326,7 +1331,7 @@ function AdsCreativeTab() {
                             <span className="text-xs">🎬</span>
                             <span className={`text-xs font-bold uppercase tracking-wider ${t.t3}`}>Videos</span>
                             <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${t.bar} ${t.t4}`}>
-                              {isTrendingOn ? `${trendingCount} / ${product.videos.length}` : product.videos.length}
+                              {(isTrendingOn || isPerformingOn) ? `${activeFilterCount} / ${product.videos.length}` : product.videos.length}
                             </span>
 
                             {delivering > 0 && (
@@ -1340,6 +1345,8 @@ function AdsCreativeTab() {
                               <button
                                 onClick={e => {
                                   e.stopPropagation();
+                                  // toggle trending, clear performing
+                                  setPerformingFilter(prev => { const n = new Set(prev); n.delete(product.product_no); return n; });
                                   setTrendingFilter(prev => {
                                     const next = new Set(prev);
                                     if (next.has(product.product_no)) next.delete(product.product_no);
@@ -1358,10 +1365,30 @@ function AdsCreativeTab() {
                               <span className={`text-[10px] ${t.t4}`}>0 trending</span>
                             )}
 
-                            {/* ⭐ Performing count (orders but cost/order ≥ $1) */}
+                            {/* ⭐ Performing pill — clickable filter */}
                             {performingCount > 0 && (
-                              <><span className={`text-[10px] ${t.t4}`}>·</span>
-                              <span className="text-[10px] font-semibold text-blue-500">⭐ {performingCount} performing</span></>
+                              <>
+                                <span className={`text-[10px] ${t.t4}`}>·</span>
+                                <button
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    // toggle performing, clear trending
+                                    setTrendingFilter(prev => { const n = new Set(prev); n.delete(product.product_no); return n; });
+                                    setPerformingFilter(prev => {
+                                      const next = new Set(prev);
+                                      if (next.has(product.product_no)) next.delete(product.product_no);
+                                      else next.add(product.product_no);
+                                      return next;
+                                    });
+                                  }}
+                                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${
+                                    isPerformingOn
+                                      ? "bg-blue-500 text-white border-blue-500 shadow-sm"
+                                      : "bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100"
+                                  }`}>
+                                  ⭐ {performingCount} Performing{isPerformingOn ? " · show all" : ""}
+                                </button>
+                              </>
                             )}
                           </div>
 
