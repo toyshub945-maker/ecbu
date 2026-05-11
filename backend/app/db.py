@@ -429,6 +429,9 @@ def init_db(db_path: str | None = None) -> None:
             )""",
             # Source column to separate Board uploads from Product Manager uploads
             "ALTER TABLE tiktok_export_analytics ADD COLUMN source TEXT DEFAULT 'pm'",
+            # Ads: orders count + date range end
+            "ALTER TABLE ads_campaigns ADD COLUMN orders INTEGER DEFAULT 0",
+            "ALTER TABLE ads_campaigns ADD COLUMN date_range_end DATE",
         ]
         for sql in migrations:
             try:

@@ -17,7 +17,9 @@ type AdRecord = {
   store_name: string;
   product_number: string;
   date: string;
+  date_range_end: string | null;
   status: string;
+  orders: number;
   roi: number;
   cost_per_order: number;
   ad_cost_rate: number;
@@ -31,6 +33,16 @@ type AdRecord = {
   profit: number | null;
   color_flag: string | null;
   notes: string;
+};
+
+type StoreDailySummary = {
+  store: string;
+  cost: number;
+  orders: number;
+  cost_per_order: number;
+  revenue: number;
+  roi: number;
+  ad_balance: number;
 };
 
 type Summary = {
@@ -66,6 +78,21 @@ const COLUMNS = [
   { key: "total_funds", label: "Total Funds", width: "w-24", editable: true },
   { key: "notes", label: "Notes", width: "w-40", editable: true },
 ];
+
+function fmtDate(d: string | null | undefined): string {
+  if (!d) return "";
+  const dt = new Date(d + "T00:00:00");
+  return dt.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
+}
+
+function formatDateRange(record: AdRecord): string {
+  const end = record.date_range_end || record.date;
+  const start = record.date;
+  if (record.date_range_end && record.date_range_end !== record.date) {
+    return `${fmtDate(start)} – ${fmtDate(end)}`;
+  }
+  return fmtDate(start);
+}
 
 function getAdCostRateCellStyle(rate: number): React.CSSProperties {
   if (rate <= 5)  return { backgroundColor: "#4CAF50", color: "#fff" };
@@ -107,6 +134,11 @@ export default function AdsPage() {
   const [showUpload, setShowUpload] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadDate, setUploadDate] = useState("");
+  const [uploadDateEnd, setUploadDateEnd] = useState("");
+  // Weekend / Live daily summary
+  const [summaryDate, setSummaryDate] = useState("");
+  const [storeDailySummary, setStoreDailySummary] = useState<StoreDailySummary[]>([]);
+  const [summaryLoading, setSummaryLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showBulkEdit, setShowBulkEdit] = useState(false);
@@ -147,10 +179,31 @@ export default function AdsPage() {
     }
   };
 
+  const fetchDailySummary = useCallback(async (date?: string) => {
+    setSummaryLoading(true);
+    try {
+      const qs = date ? `?date=${date}` : "";
+      const res = await fetch(backendUrl(`/api/ads/daily-summary${qs}`));
+      const data = await res.json();
+      if (data.date) setSummaryDate(data.date);
+      setStoreDailySummary(data.stores || []);
+    } catch (e) {
+      console.error("Failed to load daily summary");
+    } finally {
+      setSummaryLoading(false);
+    }
+  }, []);
+
+  const isSpecialTab = activeTab === "Live" || activeTab === "Weekend";
+
   useEffect(() => {
     fetchAds();
     fetchSummary();
   }, [fetchAds]);
+
+  useEffect(() => {
+    if (isSpecialTab) fetchDailySummary(summaryDate || undefined);
+  }, [isSpecialTab, fetchDailySummary]);
 
   const handleUpload = async () => {
     if (!uploadFile || !uploadDate) {
@@ -165,6 +218,7 @@ export default function AdsPage() {
       formData.append("file", uploadFile);
       formData.append("store_name", activeTab);
       formData.append("date", uploadDate);
+      if (isSpecialTab && uploadDateEnd) formData.append("date_range_end", uploadDateEnd);
       const res = await fetch(backendUrl("/api/ads/upload"), { method: "POST", body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Upload failed");
@@ -571,6 +625,187 @@ export default function AdsPage() {
           </div>
         )}
 
+        {/* ── Weekend / Live special layout ────────────────────────────── */}
+        {isSpecialTab && (
+          <div className="mb-4 space-y-4">
+            {/* Daily store summary */}
+            <div className={`${t.card} rounded-xl border ${t.divider} overflow-hidden`}>
+              <div className={`${theadBg} px-4 py-2.5 flex items-center justify-between`}>
+                <span className={`font-bold text-sm ${theadText} uppercase tracking-wide`}>
+                  📅 Daily Store Summary
+                </span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={summaryDate}
+                    onChange={e => { setSummaryDate(e.target.value); fetchDailySummary(e.target.value); }}
+                    className={`px-2 py-1 text-xs border rounded ${t.inp}`}
+                  />
+                  <button onClick={() => fetchDailySummary(summaryDate || undefined)} className="px-3 py-1 text-xs bg-white/20 hover:bg-white/30 rounded text-white font-medium">
+                    {summaryLoading ? "…" : "Refresh"}
+                  </button>
+                </div>
+              </div>
+              <div className="overflow-auto">
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr className={`${theadBg}`}>
+                      {["Store", "Cost", "Orders", "Cost Per Order", "Gross Revenue", "ROI", "AD Balance"].map(h => (
+                        <th key={h} className={`border ${borderCls} px-4 py-2 text-xs font-bold ${theadText} uppercase tracking-wide text-center`}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {storeDailySummary.length === 0 ? (
+                      <tr><td colSpan={7} className={`text-center py-8 ${t.t4} text-sm`}>{summaryLoading ? "Loading…" : "No data — upload for TT1–TT4 stores first"}</td></tr>
+                    ) : storeDailySummary.map((row, i) => (
+                      <tr key={row.store} className={`${i % 2 === 1 ? (dark ? "bg-white/5" : "bg-amber-50/40") : ""} font-semibold`}>
+                        <td className={`border ${tbodyBorder} px-4 py-2.5 text-center font-bold ${t.t1}`}>{row.store}</td>
+                        <td className={`border ${tbodyBorder} px-4 py-2.5 text-center ${t.t2}`}>${row.cost.toFixed(2)}</td>
+                        <td className={`border ${tbodyBorder} px-4 py-2.5 text-center ${t.t2}`}>{row.orders}</td>
+                        <td className={`border ${tbodyBorder} px-4 py-2.5 text-center ${t.t2}`}>{row.cost_per_order > 0 ? `$${row.cost_per_order.toFixed(2)}` : "—"}</td>
+                        <td className={`border ${tbodyBorder} px-4 py-2.5 text-center ${t.t2}`}>${row.revenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        <td className={`border ${tbodyBorder} px-4 py-2.5 text-center font-bold ${row.roi >= 10 ? "text-green-600" : row.roi > 0 ? "text-amber-600" : t.t4}`}>{row.roi > 0 ? row.roi.toFixed(2) : "—"}</td>
+                        <td className={`border ${tbodyBorder} px-4 py-2.5 text-center ${t.t2}`}>{row.ad_balance > 0 ? `$${row.ad_balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Weekend/Live campaign records */}
+            <div className={`${t.card} rounded-xl border ${t.divider} overflow-hidden`}>
+              <div className={`${theadBg} px-4 py-2.5`}>
+                <span className={`font-bold text-sm ${theadText} uppercase tracking-wide`}>
+                  🗓️ {activeTab} Campaign Records
+                </span>
+              </div>
+              <div className="overflow-auto" ref={tableRef}>
+                <table className="w-full border-collapse text-sm">
+                  <thead className={`${theadBg} sticky top-0 z-10`}>
+                    <tr>
+                      <th className={`border ${borderCls} px-2 py-2.5 ${theadBg} w-10`}>
+                        <input type="checkbox" checked={selectedIds.size === displayedAds.length && displayedAds.length > 0} onChange={toggleSelectAll} className="w-4 h-4" />
+                      </th>
+                      {[
+                        { label: "Status", w: "w-24" },
+                        { label: "Date Range", w: "w-52" },
+                        { label: "ROI", w: "w-20" },
+                        { label: "Cost Per Order", w: "w-28" },
+                        { label: "Ad Cost Rate", w: "w-28" },
+                        { label: "AD Spend", w: "w-28" },
+                        { label: "Revenue", w: "w-28" },
+                        { label: "Campaign Budget", w: "w-32" },
+                        { label: "Budget Adjustment", w: "w-36" },
+                        { label: "Notes", w: "w-40" },
+                      ].map(col => (
+                        <th key={col.label} className={`border ${borderCls} px-3 py-2.5 text-left ${theadBg} text-xs font-bold ${theadText} uppercase tracking-wide ${col.w}`}>
+                          {col.label}
+                        </th>
+                      ))}
+                      <th className={`border ${borderCls} px-2 py-2.5 text-center ${theadBg} w-16 ${theadText}`}>Del</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loading ? (
+                      <tr><td colSpan={11} className={`text-center py-12 ${t.t4}`}>Loading…</td></tr>
+                    ) : displayedAds.length === 0 ? (
+                      <tr><td colSpan={11} className={`text-center py-12 ${t.t4}`}>No records — upload data for {activeTab}</td></tr>
+                    ) : displayedAds.map(record => {
+                      const rateStyle = getAdCostRateCellStyle(record.ad_cost_rate);
+                      const statusCls = record.status === "Active"
+                        ? "bg-green-100 text-green-800"
+                        : record.status === "Paused"
+                          ? "bg-yellow-100 text-yellow-800"
+                          : "bg-gray-100 text-gray-700";
+                      return (
+                        <tr key={record.id} className={hoverRow}>
+                          <td className={`border ${tbodyBorder} px-2 py-2 text-center`}>
+                            <input type="checkbox" checked={selectedIds.has(record.id)} onChange={() => toggleSelect(record.id)} className="w-4 h-4" />
+                          </td>
+                          {/* Status */}
+                          <td className={`border ${tbodyBorder} px-3 py-2`}
+                            onClick={() => startEdit(record, "status")}>
+                            {focusedCell?.id === record.id && focusedCell?.field === "status"
+                              ? renderCellValue(record, { key: "status", label: "Status", width: "", editable: true })
+                              : <span className={`px-2 py-0.5 rounded text-xs font-semibold ${statusCls}`}>{record.status}</span>}
+                          </td>
+                          {/* Date Range */}
+                          <td className={`border ${tbodyBorder} px-3 py-2 text-sm ${t.t2} whitespace-nowrap`}>
+                            {formatDateRange(record)}
+                          </td>
+                          {/* ROI */}
+                          <td className={`border ${tbodyBorder} px-3 py-2 text-center font-semibold ${record.roi >= 10 ? "text-green-600" : record.roi > 0 ? "text-amber-600" : t.t4}`}
+                            onClick={() => startEdit(record, "roi")}>
+                            {focusedCell?.id === record.id && focusedCell?.field === "roi"
+                              ? renderCellValue(record, { key: "roi", label: "ROI", width: "", editable: true })
+                              : record.roi > 0 ? record.roi.toFixed(2) : "—"}
+                          </td>
+                          {/* Cost Per Order */}
+                          <td className={`border ${tbodyBorder} px-3 py-2 text-center ${t.t2}`}
+                            onClick={() => startEdit(record, "cost_per_order")}>
+                            {focusedCell?.id === record.id && focusedCell?.field === "cost_per_order"
+                              ? renderCellValue(record, { key: "cost_per_order", label: "", width: "", editable: true })
+                              : record.cost_per_order > 0 ? `$${record.cost_per_order.toFixed(2)}` : "—"}
+                          </td>
+                          {/* Ad Cost Rate — colored cell */}
+                          <td className={`border ${tbodyBorder} px-3 py-2 text-center font-bold`} style={rateStyle}
+                            onClick={() => startEdit(record, "ad_cost_rate")}>
+                            {focusedCell?.id === record.id && focusedCell?.field === "ad_cost_rate"
+                              ? renderCellValue(record, { key: "ad_cost_rate", label: "", width: "", editable: true })
+                              : `${record.ad_cost_rate?.toFixed(2) ?? "0"}%`}
+                          </td>
+                          {/* AD Spend */}
+                          <td className={`border ${tbodyBorder} px-3 py-2 text-center ${t.t2}`}
+                            onClick={() => startEdit(record, "ad_spend")}>
+                            {focusedCell?.id === record.id && focusedCell?.field === "ad_spend"
+                              ? renderCellValue(record, { key: "ad_spend", label: "", width: "", editable: true })
+                              : record.ad_spend > 0 ? `$${record.ad_spend.toFixed(2)}` : "—"}
+                          </td>
+                          {/* Revenue */}
+                          <td className={`border ${tbodyBorder} px-3 py-2 text-center ${t.t2}`}
+                            onClick={() => startEdit(record, "revenue")}>
+                            {focusedCell?.id === record.id && focusedCell?.field === "revenue"
+                              ? renderCellValue(record, { key: "revenue", label: "", width: "", editable: true })
+                              : record.revenue > 0 ? `$${record.revenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : "—"}
+                          </td>
+                          {/* Campaign Budget */}
+                          <td className={`border ${tbodyBorder} px-3 py-2 text-center ${t.t2}`}
+                            onClick={() => startEdit(record, "campaign_budget")}>
+                            {focusedCell?.id === record.id && focusedCell?.field === "campaign_budget"
+                              ? renderCellValue(record, { key: "campaign_budget", label: "", width: "", editable: true })
+                              : record.campaign_budget > 0 ? record.campaign_budget : "—"}
+                          </td>
+                          {/* Budget Adjustment */}
+                          <td className={`border ${tbodyBorder} px-3 py-2 text-center ${t.t2}`}
+                            onClick={() => startEdit(record, "budget_adjustment")}>
+                            {focusedCell?.id === record.id && focusedCell?.field === "budget_adjustment"
+                              ? renderCellValue(record, { key: "budget_adjustment", label: "", width: "", editable: true })
+                              : record.budget_adjustment || "—"}
+                          </td>
+                          {/* Notes */}
+                          <td className={`border ${tbodyBorder} px-3 py-2 ${t.t3} max-w-[160px] truncate`}
+                            onClick={() => startEdit(record, "notes")}>
+                            {focusedCell?.id === record.id && focusedCell?.field === "notes"
+                              ? renderCellValue(record, { key: "notes", label: "", width: "", editable: true })
+                              : record.notes || "—"}
+                          </td>
+                          <td className={`border ${tbodyBorder} px-2 py-1 text-center`}>
+                            <button onClick={() => handleDelete(record.id)} className="text-red-500 hover:text-red-700 text-sm">🗑️</button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Regular store table ──────────────────────────────────────── */}
+        {!isSpecialTab && (
         <div className={`${t.card} rounded-lg border ${t.divider} overflow-hidden`}>
           {loading ? (
             <div className={`text-center py-20 ${t.t4}`}>Loading...</div>
@@ -630,15 +865,16 @@ export default function AdsPage() {
             </div>
           )}
         </div>
+        )}
 
         <div className={`mt-3 text-xs ${t.t3} flex flex-wrap gap-4`}>
-          <span>💡 Click to edit • Enter to save • Arrow keys to navigate • Tab to move right</span>
-          <span>📋 Ctrl+C to copy • Ctrl+V to paste</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 bg-green-50 border border-gray-300"></span> ≤5%</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 bg-pink-50 border border-gray-300"></span> 6%</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 bg-pink-100 border border-gray-300"></span> 7%</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 bg-orange-50 border border-gray-300"></span> 8-9%</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 bg-red-50 border border-gray-300"></span> &gt;9%</span>
+          <span>💡 Click to edit • Enter to save • Tab to move right</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{background:"#4CAF50"}}></span> ≤5%</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{background:"#FFE0B2"}}></span> 6%</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{background:"#FFCC80"}}></span> 7%</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{background:"#FFA726"}}></span> 8%</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{background:"#FF7043"}}></span> 9%</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{background:"#F44336"}}></span> &gt;9%</span>
         </div>
       </div>
 
@@ -651,10 +887,23 @@ export default function AdsPage() {
                 <label className={`block text-sm font-medium ${t.t2} mb-1`}>Store</label>
                 <input value={activeTab} disabled className={`w-full px-4 py-2 border rounded-lg ${t.inp} opacity-60`} />
               </div>
-              <div>
-                <label className={`block text-sm font-medium ${t.t2} mb-1`}>Date</label>
-                <input type="date" value={uploadDate} onChange={e => setUploadDate(e.target.value)} className={`w-full px-4 py-2 border rounded-lg ${t.inp}`} />
-              </div>
+              {isSpecialTab ? (
+                <div className="space-y-3">
+                  <div>
+                    <label className={`block text-sm font-medium ${t.t2} mb-1`}>Date Range Start</label>
+                    <input type="date" value={uploadDate} onChange={e => setUploadDate(e.target.value)} className={`w-full px-4 py-2 border rounded-lg ${t.inp}`} />
+                  </div>
+                  <div>
+                    <label className={`block text-sm font-medium ${t.t2} mb-1`}>Date Range End</label>
+                    <input type="date" value={uploadDateEnd} onChange={e => setUploadDateEnd(e.target.value)} className={`w-full px-4 py-2 border rounded-lg ${t.inp}`} />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className={`block text-sm font-medium ${t.t2} mb-1`}>Date</label>
+                  <input type="date" value={uploadDate} onChange={e => setUploadDate(e.target.value)} className={`w-full px-4 py-2 border rounded-lg ${t.inp}`} />
+                </div>
+              )}
               <div>
                 <label className={`block text-sm font-medium ${t.t2} mb-1`}>Excel File</label>
                 <input type="file" accept=".xlsx,.xls" onChange={e => setUploadFile(e.target.files?.[0] || null)} className={`w-full px-4 py-2 border rounded-lg ${t.inp}`} />

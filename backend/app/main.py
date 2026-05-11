@@ -2462,7 +2462,9 @@ async def upload_warehouse_image(
 class AdsUpdateRequest(BaseModel):
     product_number: str | None = None
     date: str | None = None
+    date_range_end: str | None = None
     status: str | None = None
+    orders: int | None = None
     roi: float | None = None
     cost_per_order: float | None = None
     ad_cost_rate: float | None = None
@@ -2506,16 +2508,35 @@ async def upload_ads(
     file: UploadFile = File(...),
     store_name: str = Form(...),
     date: str = Form(...),
+    date_range_end: str | None = Form(None),
 ):
     """Upload ads data from Excel file."""
     try:
         content = await file.read()
-        records = ads.parse_ads_excel(content, store_name, date)
+        records = ads.parse_ads_excel(content, store_name, date, date_range_end or None)
         result = ads.save_ads_records(records)
         return {"ok": True, **result}
     except Exception as e:
         print(f"ERROR uploading ads: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+
+@app.get("/api/ads/daily-summary")
+def get_ads_daily_summary(date: str | None = None):
+    """Per-TT-store aggregated daily metrics for Weekend/Live tabs."""
+    try:
+        return ads.get_daily_store_summary(date)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/ads/available-dates")
+def get_ads_available_dates():
+    """Distinct dates that have data across TT stores."""
+    try:
+        return {"dates": ads.get_available_dates_for_stores(list(ads.TT_STORES.keys()))}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.put("/api/ads/{record_id}")

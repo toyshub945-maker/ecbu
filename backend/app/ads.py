@@ -21,44 +21,46 @@ def get_store_name_from_sheet(sheet_name: str) -> str:
     return REVERSE_STORE_MAPPING.get(sheet_name, sheet_name)
 
 
-def parse_ads_excel(file_content: bytes, store_name: str, date: str) -> list[dict]:
+def parse_ads_excel(file_content: bytes, store_name: str, date: str, date_range_end: str | None = None) -> list[dict]:
     df = pd.read_excel(io.BytesIO(file_content))
     records = []
-    
+
     for _, row in df.iterrows():
         campaign_name = str(row.get("Campaign name", row.get("Campaign Name", "")))
-        
+
         if not campaign_name or campaign_name == "nan":
             continue
-        
+
         product_number = ""
         if "Product" in campaign_name:
             parts = campaign_name.split("Product")
             if len(parts) > 1:
                 product_number = parts[1].strip()
-        
+
         product_number = product_number or campaign_name
-        
+
         cost = row.get("Cost", 0) or 0
         gross_revenue = row.get("Gross revenue", row.get("Gross Revenue", 0)) or 0
         roi = row.get("ROI", 0) or 0
         cost_per_order = row.get("Cost per order", row.get("Cost Per Order", 0)) or 0
         orders = row.get("SKU orders", row.get("Orders", 0)) or 0
         current_budget = row.get("Current budget", row.get("Budget", 0)) or 0
-        
+
         if gross_revenue > 0:
             ad_cost_rate = (cost / gross_revenue) * 100
         else:
             ad_cost_rate = 0
-        
+
         if cost > 0 and orders > 0:
             cost_per_order = cost / orders
-        
+
         records.append({
             "store_name": store_name,
             "product_number": str(product_number),
             "date": date,
+            "date_range_end": date_range_end,
             "status": "Active",
+            "orders": int(orders) if orders else 0,
             "roi": float(roi) if roi else 0,
             "cost_per_order": float(cost_per_order) if cost_per_order else 0,
             "ad_cost_rate": float(round(ad_cost_rate, 2)),
@@ -73,28 +75,30 @@ def parse_ads_excel(file_content: bytes, store_name: str, date: str) -> list[dic
             "color_flag": None,
             "notes": "",
         })
-    
+
     return records
 
 
 def save_ads_records(records: list[dict]) -> dict:
     inserted = 0
     updated = 0
-    
+
     with db.db_cursor() as cur:
         for record in records:
             cur.execute("""
                 INSERT INTO ads_campaigns (
-                    store_name, product_number, date, status, roi, cost_per_order,
-                    ad_cost_rate, ad_spend, revenue, campaign_budget, budget_adjustment,
-                    extra_budget_id, ads_open_date, total_funds, profit, color_flag, notes,
-                    updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    store_name, product_number, date, date_range_end, status, orders,
+                    roi, cost_per_order, ad_cost_rate, ad_spend, revenue, campaign_budget,
+                    budget_adjustment, extra_budget_id, ads_open_date, total_funds, profit,
+                    color_flag, notes, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """, (
                 record.get("store_name"),
                 record.get("product_number"),
                 record.get("date"),
+                record.get("date_range_end"),
                 record.get("status", "Active"),
+                record.get("orders", 0),
                 record.get("roi"),
                 record.get("cost_per_order"),
                 record.get("ad_cost_rate"),
@@ -110,7 +114,7 @@ def save_ads_records(records: list[dict]) -> dict:
                 record.get("notes"),
             ))
             inserted += 1
-    
+
     return {"total": len(records), "inserted": inserted, "updated": updated}
 
 
@@ -193,9 +197,10 @@ def update_ads_record(record_id: int, data: dict) -> dict:
         set_clauses = []
         values = []
         
-        for field in ["product_number", "date", "status", "roi", "cost_per_order", "ad_cost_rate",
-                      "ad_spend", "revenue", "campaign_budget", "budget_adjustment", "extra_budget_id",
-                      "ads_open_date", "total_funds", "profit", "color_flag", "notes"]:
+        for field in ["product_number", "date", "date_range_end", "status", "orders", "roi",
+                      "cost_per_order", "ad_cost_rate", "ad_spend", "revenue", "campaign_budget",
+                      "budget_adjustment", "extra_budget_id", "ads_open_date", "total_funds",
+                      "profit", "color_flag", "notes"]:
             if field in data:
                 set_clauses.append(f"{field} = ?")
                 values.append(data[field])
@@ -220,11 +225,70 @@ def delete_ads_record(record_id: int) -> dict:
 
 def export_to_excel(store_name: str | None = None) -> bytes:
     records = get_ads_by_store(store_name=store_name)
-    
     df = pd.DataFrame(records)
-    
-    output = pd.BytesIO()
+    output = io.BytesIO()
     df.to_excel(output, index=False, engine='openpyxl')
     output.seek(0)
-    
     return output.read()
+
+
+# TT store labels for daily summary
+TT_STORES = {
+    "CELNEPHO": "TT1",
+    "CYNLLIO": "TT2",
+    "VIMISAOI": "TT3",
+    "mikarka shoes": "TT4",
+}
+
+
+def get_daily_store_summary(date: str | None = None) -> dict:
+    """Return per-TT-store aggregated metrics for a given date (defaults to latest)."""
+    with db.db_cursor() as cur:
+        if not date:
+            cur.execute("SELECT MAX(date) as latest FROM ads_campaigns WHERE store_name IN (?, ?, ?, ?)",
+                        tuple(TT_STORES.keys()))
+            row = cur.fetchone()
+            date = row["latest"] if row else None
+
+        if not date:
+            return {"date": None, "stores": []}
+
+        result = []
+        for store_name, label in TT_STORES.items():
+            cur.execute("""
+                SELECT
+                    COALESCE(SUM(ad_spend), 0)       AS cost,
+                    COALESCE(SUM(orders), 0)         AS orders,
+                    COALESCE(SUM(revenue), 0)        AS revenue,
+                    COALESCE(AVG(roi), 0)            AS roi,
+                    COALESCE(MAX(total_funds), 0)    AS ad_balance
+                FROM ads_campaigns
+                WHERE store_name = ? AND date = ?
+            """, (store_name, date))
+            row = cur.fetchone()
+            if row:
+                cost = float(row["cost"])
+                orders = int(row["orders"])
+                cpo = round(cost / orders, 2) if orders > 0 else 0
+                result.append({
+                    "store": label,
+                    "cost": round(cost, 2),
+                    "orders": orders,
+                    "cost_per_order": cpo,
+                    "revenue": round(float(row["revenue"]), 2),
+                    "roi": round(float(row["roi"]), 2),
+                    "ad_balance": round(float(row["ad_balance"]), 2),
+                })
+
+        return {"date": date, "stores": result}
+
+
+def get_available_dates_for_stores(store_names: list[str]) -> list[str]:
+    """Return distinct dates that have data for any of the given stores."""
+    placeholders = ",".join("?" * len(store_names))
+    with db.db_cursor() as cur:
+        cur.execute(
+            f"SELECT DISTINCT date FROM ads_campaigns WHERE store_name IN ({placeholders}) ORDER BY date DESC LIMIT 90",
+            store_names,
+        )
+        return [row["date"] for row in cur.fetchall()]
