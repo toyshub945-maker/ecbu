@@ -2523,7 +2523,6 @@ async def upload_ads(
 
 @app.get("/api/ads/daily-summary")
 def get_ads_daily_summary(date: str | None = None):
-    """Per-TT-store aggregated daily metrics for Weekend/Live tabs."""
     try:
         return ads.get_daily_store_summary(date)
     except Exception as e:
@@ -2532,9 +2531,39 @@ def get_ads_daily_summary(date: str | None = None):
 
 @app.get("/api/ads/available-dates")
 def get_ads_available_dates():
-    """Distinct dates that have data across TT stores."""
     try:
         return {"dates": ads.get_available_dates_for_stores(list(ads.TT_STORES.keys()))}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class WeekendRowRequest(BaseModel):
+    store_name: str
+    product_number: str
+    date: str
+    ad_spend: float | None = None
+    orders: int | None = None
+    cost_per_order: float | None = None
+    revenue: float | None = None
+    roi: float | None = None
+    total_funds: float | None = None
+
+
+@app.put("/api/ads/weekend-row")
+def upsert_weekend_row(data: WeekendRowRequest):
+    """Upsert a single TT row in the Weekend/Live grid."""
+    try:
+        payload = data.model_dump(exclude={"store_name", "product_number", "date"}, exclude_none=True)
+        return ads.upsert_weekend_row(data.store_name, data.product_number, data.date, payload)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/ads/weekend-rows")
+def get_weekend_rows(store_name: str, date: str):
+    """Return TT1–TT4 rows for a store + date."""
+    try:
+        return {"rows": ads.get_weekend_rows(store_name, date)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

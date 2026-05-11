@@ -223,6 +223,63 @@ def delete_ads_record(record_id: int) -> dict:
         return {"deleted": cur.rowcount}
 
 
+def upsert_weekend_row(store_name: str, product_number: str, date: str, data: dict) -> dict:
+    """Insert or update a single row identified by (store_name, product_number, date)."""
+    with db.db_cursor() as cur:
+        cur.execute(
+            "SELECT id FROM ads_campaigns WHERE store_name=? AND product_number=? AND date=?",
+            (store_name, product_number, date),
+        )
+        row = cur.fetchone()
+
+        fields = ["ad_spend", "orders", "cost_per_order", "revenue", "roi", "total_funds"]
+        if row:
+            sets = ", ".join(f"{f} = ?" for f in fields if f in data)
+            vals = [data[f] for f in fields if f in data]
+            if sets:
+                vals.append(row["id"])
+                cur.execute(f"UPDATE ads_campaigns SET {sets}, updated_at=CURRENT_TIMESTAMP WHERE id=?", vals)
+            return {"id": row["id"], "action": "updated"}
+        else:
+            cur.execute("""
+                INSERT INTO ads_campaigns
+                    (store_name, product_number, date, status,
+                     ad_spend, orders, cost_per_order, revenue, roi, total_funds,
+                     updated_at)
+                VALUES (?,?,?,'Active',?,?,?,?,?,?,CURRENT_TIMESTAMP)
+            """, (
+                store_name, product_number, date,
+                data.get("ad_spend", 0), data.get("orders", 0),
+                data.get("cost_per_order", 0), data.get("revenue", 0),
+                data.get("roi", 0), data.get("total_funds", 0),
+            ))
+            return {"id": cur.lastrowid, "action": "inserted"}
+
+
+def get_weekend_rows(store_name: str, date: str) -> list[dict]:
+    """Return TT1–TT4 rows for a given store + date (creates blanks if missing)."""
+    tt_labels = ["TT1", "TT2", "TT3", "TT4"]
+    with db.db_cursor() as cur:
+        cur.execute(
+            "SELECT * FROM ads_campaigns WHERE store_name=? AND date=? AND product_number IN (?,?,?,?)",
+            (store_name, date, *tt_labels),
+        )
+        rows = {r["product_number"]: dict(r) for r in cur.fetchall()}
+
+    result = []
+    for label in tt_labels:
+        if label in rows:
+            result.append(rows[label])
+        else:
+            result.append({
+                "id": None, "store_name": store_name, "product_number": label,
+                "date": date, "status": "Active",
+                "ad_spend": 0, "orders": 0, "cost_per_order": 0,
+                "revenue": 0, "roi": 0, "total_funds": 0,
+            })
+    return result
+
+
 def export_to_excel(store_name: str | None = None) -> bytes:
     records = get_ads_by_store(store_name=store_name)
     df = pd.DataFrame(records)

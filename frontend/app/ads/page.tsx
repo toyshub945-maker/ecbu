@@ -138,6 +138,18 @@ export default function AdsPage() {
   const [editValue, setEditValue] = useState("");
   const [copiedCell, setCopiedCell] = useState<{value: string; id: number; field: string} | null>(null);
 
+  // Weekend grid
+  type WeekendRow = { id: number | null; product_number: string; ad_spend: number; orders: number; cost_per_order: number; revenue: number; roi: number; total_funds: number; };
+  const [weekendDate, setWeekendDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [weekendRows, setWeekendRows] = useState<WeekendRow[]>([
+    { id: null, product_number: "TT1", ad_spend: 0, orders: 0, cost_per_order: 0, revenue: 0, roi: 0, total_funds: 0 },
+    { id: null, product_number: "TT2", ad_spend: 0, orders: 0, cost_per_order: 0, revenue: 0, roi: 0, total_funds: 0 },
+    { id: null, product_number: "TT3", ad_spend: 0, orders: 0, cost_per_order: 0, revenue: 0, roi: 0, total_funds: 0 },
+    { id: null, product_number: "TT4", ad_spend: 0, orders: 0, cost_per_order: 0, revenue: 0, roi: 0, total_funds: 0 },
+  ]);
+  const [weekendSaving, setWeekendSaving] = useState(false);
+  const [weekendMsg, setWeekendMsg] = useState("");
+
   const tableRef = useRef<HTMLDivElement>(null);
 
   const fetchAds = useCallback(async () => {
@@ -166,12 +178,57 @@ export default function AdsPage() {
     }
   };
 
+  const fetchWeekendRows = useCallback(async (date: string) => {
+    try {
+      const res = await fetch(backendUrl(`/api/ads/weekend-rows?store_name=Weekend&date=${date}`));
+      const data = await res.json();
+      if (data.rows) {
+        setWeekendRows(data.rows.map((r: any) => ({
+          id: r.id ?? null,
+          product_number: r.product_number,
+          ad_spend: r.ad_spend ?? 0,
+          orders: r.orders ?? 0,
+          cost_per_order: r.cost_per_order ?? 0,
+          revenue: r.revenue ?? 0,
+          roi: r.roi ?? 0,
+          total_funds: r.total_funds ?? 0,
+        })));
+      }
+    } catch { /* silent */ }
+  }, []);
+
+  const saveWeekendRow = async (row: WeekendRow) => {
+    setWeekendSaving(true);
+    setWeekendMsg("");
+    try {
+      const res = await fetch(backendUrl("/api/ads/weekend-row"), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ store_name: "Weekend", product_number: row.product_number, date: weekendDate, ...row }),
+      });
+      const data = await res.json();
+      if (data.id) {
+        setWeekendRows(prev => prev.map(r => r.product_number === row.product_number ? { ...r, id: data.id } : r));
+      }
+      setWeekendMsg("Saved ✓");
+      setTimeout(() => setWeekendMsg(""), 2000);
+    } catch {
+      setWeekendMsg("Save failed");
+    } finally {
+      setWeekendSaving(false);
+    }
+  };
+
   const isSpecialTab = activeTab === "Live" || activeTab === "Weekend";
 
   useEffect(() => {
     fetchAds();
     fetchSummary();
   }, [fetchAds]);
+
+  useEffect(() => {
+    if (activeTab === "Weekend") fetchWeekendRows(weekendDate);
+  }, [activeTab, weekendDate, fetchWeekendRows]);
 
   const handleUpload = async () => {
     if (!uploadFile || !uploadDate) {
@@ -593,15 +650,83 @@ export default function AdsPage() {
           </div>
         )}
 
-        {/* ── Weekend / Live special layout ────────────────────────────── */}
-        {isSpecialTab && (
+        {/* ── Weekend grid ─────────────────────────────────────────────── */}
+        {activeTab === "Weekend" && (() => {
+          const wCols: { key: keyof WeekendRow; label: string }[] = [
+            { key: "ad_spend",       label: "Cost" },
+            { key: "orders",         label: "Orders" },
+            { key: "cost_per_order", label: "Cost Per Order" },
+            { key: "revenue",        label: "Gross Revenue" },
+            { key: "roi",            label: "ROI" },
+            { key: "total_funds",    label: "AD Balance" },
+          ];
+          return (
+            <div className="mb-4">
+              <div className={`${t.card} rounded-xl border ${t.divider} overflow-hidden`}>
+                <div className="overflow-auto">
+                  <table className="w-full border-collapse text-sm">
+                    <thead className={`${theadBg} sticky top-0 z-10`}>
+                      <tr>
+                        {/* Date cell — top-left with date picker */}
+                        <th className={`border ${borderCls} px-3 py-2.5 text-left ${theadBg} ${theadText} font-bold w-36`}>
+                          <input
+                            type="date"
+                            value={weekendDate}
+                            onChange={e => setWeekendDate(e.target.value)}
+                            className="bg-transparent border-none outline-none text-xs font-bold w-full cursor-pointer"
+                            style={{ colorScheme: dark ? "dark" : "light" }}
+                          />
+                        </th>
+                        {wCols.map(c => (
+                          <th key={c.key} className={`border ${borderCls} px-4 py-2.5 text-center ${theadBg} text-xs font-bold ${theadText} uppercase tracking-wide`}>
+                            {c.label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {weekendRows.map((row, ri) => (
+                        <tr key={row.product_number} className={`${ri % 2 === 1 ? (dark ? "bg-white/[0.03]" : "bg-amber-50/30") : ""}`}>
+                          <td className={`border ${tbodyBorder} px-4 py-2.5 font-bold text-center ${t.t1}`}>
+                            {row.product_number}
+                          </td>
+                          {wCols.map(col => (
+                            <td key={col.key} className={`border ${tbodyBorder} px-2 py-1.5 text-center`}>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={row[col.key] === 0 ? "" : String(row[col.key])}
+                                placeholder="—"
+                                onChange={e => {
+                                  const val = e.target.value === "" ? 0 : parseFloat(e.target.value) || 0;
+                                  setWeekendRows(prev => prev.map((r, i) => i === ri ? { ...r, [col.key]: val } : r));
+                                }}
+                                onBlur={() => saveWeekendRow(weekendRows[ri])}
+                                className={`w-full text-center bg-transparent outline-none text-sm font-medium ${t.t1} border-b border-transparent focus:border-amber-400 transition-colors`}
+                              />
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {weekendMsg && (
+                  <div className={`px-4 py-2 text-xs font-medium ${weekendMsg.includes("fail") ? "text-red-500" : "text-green-600"}`}>
+                    {weekendSaving ? "Saving…" : weekendMsg}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ── Live campaign records ─────────────────────────────────────── */}
+        {activeTab === "Live" && (
           <div className="mb-4">
-            {/* Campaign records table */}
             <div className={`${t.card} rounded-xl border ${t.divider} overflow-hidden`}>
               <div className={`${theadBg} px-4 py-2.5`}>
-                <span className={`font-bold text-sm ${theadText} uppercase tracking-wide`}>
-                  🗓️ {activeTab} Campaign Records
-                </span>
+                <span className={`font-bold text-sm ${theadText} uppercase tracking-wide`}>🗓️ Live Campaign Records</span>
               </div>
               <div className="overflow-auto" ref={tableRef}>
                 <table className="w-full border-collapse text-sm">
@@ -611,111 +736,39 @@ export default function AdsPage() {
                         <input type="checkbox" checked={selectedIds.size === displayedAds.length && displayedAds.length > 0} onChange={toggleSelectAll} className="w-4 h-4" />
                       </th>
                       {[
-                        { label: "Status", w: "w-24" },
-                        { label: "Date Range", w: "w-52" },
-                        { label: "ROI", w: "w-20" },
-                        { label: "Cost Per Order", w: "w-28" },
-                        { label: "Ad Cost Rate", w: "w-28" },
-                        { label: "AD Spend", w: "w-28" },
-                        { label: "Revenue", w: "w-28" },
-                        { label: "Campaign Budget", w: "w-32" },
-                        { label: "Budget Adjustment", w: "w-36" },
-                        { label: "Notes", w: "w-40" },
+                        { label: "Status", w: "w-24" }, { label: "Date Range", w: "w-52" },
+                        { label: "ROI", w: "w-20" }, { label: "Cost Per Order", w: "w-28" },
+                        { label: "Ad Cost Rate", w: "w-28" }, { label: "AD Spend", w: "w-28" },
+                        { label: "Revenue", w: "w-28" }, { label: "Campaign Budget", w: "w-32" },
+                        { label: "Budget Adj.", w: "w-32" }, { label: "Notes", w: "w-40" },
                       ].map(col => (
-                        <th key={col.label} className={`border ${borderCls} px-3 py-2.5 text-left ${theadBg} text-xs font-bold ${theadText} uppercase tracking-wide ${col.w}`}>
-                          {col.label}
-                        </th>
+                        <th key={col.label} className={`border ${borderCls} px-3 py-2.5 text-left ${theadBg} text-xs font-bold ${theadText} uppercase tracking-wide ${col.w}`}>{col.label}</th>
                       ))}
-                      <th className={`border ${borderCls} px-2 py-2.5 text-center ${theadBg} w-16 ${theadText}`}>Del</th>
+                      <th className={`border ${borderCls} px-2 py-2.5 text-center ${theadBg} w-14 ${theadText}`}>Del</th>
                     </tr>
                   </thead>
                   <tbody>
                     {loading ? (
                       <tr><td colSpan={11} className={`text-center py-12 ${t.t4}`}>Loading…</td></tr>
                     ) : displayedAds.length === 0 ? (
-                      <tr><td colSpan={11} className={`text-center py-12 ${t.t4}`}>No records — upload data for {activeTab}</td></tr>
+                      <tr><td colSpan={11} className={`text-center py-12 ${t.t4}`}>No records — upload data for Live</td></tr>
                     ) : displayedAds.map(record => {
                       const rateStyle = getAdCostRateCellStyle(record.ad_cost_rate);
-                      const statusCls = record.status === "Active"
-                        ? "bg-green-100 text-green-800"
-                        : record.status === "Paused"
-                          ? "bg-yellow-100 text-yellow-800"
-                          : "bg-gray-100 text-gray-700";
+                      const statusCls = record.status === "Active" ? "bg-green-100 text-green-800" : record.status === "Paused" ? "bg-yellow-100 text-yellow-800" : "bg-gray-100 text-gray-700";
                       return (
                         <tr key={record.id} className={hoverRow}>
-                          <td className={`border ${tbodyBorder} px-2 py-2 text-center`}>
-                            <input type="checkbox" checked={selectedIds.has(record.id)} onChange={() => toggleSelect(record.id)} className="w-4 h-4" />
-                          </td>
-                          {/* Status */}
-                          <td className={`border ${tbodyBorder} px-3 py-2`}
-                            onClick={() => startEdit(record, "status")}>
-                            {focusedCell?.id === record.id && focusedCell?.field === "status"
-                              ? renderCellValue(record, { key: "status", label: "Status", width: "", editable: true })
-                              : <span className={`px-2 py-0.5 rounded text-xs font-semibold ${statusCls}`}>{record.status}</span>}
-                          </td>
-                          {/* Date Range */}
-                          <td className={`border ${tbodyBorder} px-3 py-2 text-sm ${t.t2} whitespace-nowrap`}>
-                            {formatDateRange(record)}
-                          </td>
-                          {/* ROI */}
-                          <td className={`border ${tbodyBorder} px-3 py-2 text-center font-semibold ${record.roi >= 10 ? "text-green-600" : record.roi > 0 ? "text-amber-600" : t.t4}`}
-                            onClick={() => startEdit(record, "roi")}>
-                            {focusedCell?.id === record.id && focusedCell?.field === "roi"
-                              ? renderCellValue(record, { key: "roi", label: "ROI", width: "", editable: true })
-                              : record.roi > 0 ? record.roi.toFixed(2) : "—"}
-                          </td>
-                          {/* Cost Per Order */}
-                          <td className={`border ${tbodyBorder} px-3 py-2 text-center ${t.t2}`}
-                            onClick={() => startEdit(record, "cost_per_order")}>
-                            {focusedCell?.id === record.id && focusedCell?.field === "cost_per_order"
-                              ? renderCellValue(record, { key: "cost_per_order", label: "", width: "", editable: true })
-                              : record.cost_per_order > 0 ? `$${record.cost_per_order.toFixed(2)}` : "—"}
-                          </td>
-                          {/* Ad Cost Rate — colored cell */}
-                          <td className={`border ${tbodyBorder} px-3 py-2 text-center font-bold`} style={rateStyle}
-                            onClick={() => startEdit(record, "ad_cost_rate")}>
-                            {focusedCell?.id === record.id && focusedCell?.field === "ad_cost_rate"
-                              ? renderCellValue(record, { key: "ad_cost_rate", label: "", width: "", editable: true })
-                              : `${record.ad_cost_rate?.toFixed(2) ?? "0"}%`}
-                          </td>
-                          {/* AD Spend */}
-                          <td className={`border ${tbodyBorder} px-3 py-2 text-center ${t.t2}`}
-                            onClick={() => startEdit(record, "ad_spend")}>
-                            {focusedCell?.id === record.id && focusedCell?.field === "ad_spend"
-                              ? renderCellValue(record, { key: "ad_spend", label: "", width: "", editable: true })
-                              : record.ad_spend > 0 ? `$${record.ad_spend.toFixed(2)}` : "—"}
-                          </td>
-                          {/* Revenue */}
-                          <td className={`border ${tbodyBorder} px-3 py-2 text-center ${t.t2}`}
-                            onClick={() => startEdit(record, "revenue")}>
-                            {focusedCell?.id === record.id && focusedCell?.field === "revenue"
-                              ? renderCellValue(record, { key: "revenue", label: "", width: "", editable: true })
-                              : record.revenue > 0 ? `$${record.revenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : "—"}
-                          </td>
-                          {/* Campaign Budget */}
-                          <td className={`border ${tbodyBorder} px-3 py-2 text-center ${t.t2}`}
-                            onClick={() => startEdit(record, "campaign_budget")}>
-                            {focusedCell?.id === record.id && focusedCell?.field === "campaign_budget"
-                              ? renderCellValue(record, { key: "campaign_budget", label: "", width: "", editable: true })
-                              : record.campaign_budget > 0 ? record.campaign_budget : "—"}
-                          </td>
-                          {/* Budget Adjustment */}
-                          <td className={`border ${tbodyBorder} px-3 py-2 text-center ${t.t2}`}
-                            onClick={() => startEdit(record, "budget_adjustment")}>
-                            {focusedCell?.id === record.id && focusedCell?.field === "budget_adjustment"
-                              ? renderCellValue(record, { key: "budget_adjustment", label: "", width: "", editable: true })
-                              : record.budget_adjustment || "—"}
-                          </td>
-                          {/* Notes */}
-                          <td className={`border ${tbodyBorder} px-3 py-2 ${t.t3} max-w-[160px] truncate`}
-                            onClick={() => startEdit(record, "notes")}>
-                            {focusedCell?.id === record.id && focusedCell?.field === "notes"
-                              ? renderCellValue(record, { key: "notes", label: "", width: "", editable: true })
-                              : record.notes || "—"}
-                          </td>
-                          <td className={`border ${tbodyBorder} px-2 py-1 text-center`}>
-                            <button onClick={() => handleDelete(record.id)} className="text-red-500 hover:text-red-700 text-sm">🗑️</button>
-                          </td>
+                          <td className={`border ${tbodyBorder} px-2 py-2 text-center`}><input type="checkbox" checked={selectedIds.has(record.id)} onChange={() => toggleSelect(record.id)} className="w-4 h-4" /></td>
+                          <td className={`border ${tbodyBorder} px-3 py-2`} onClick={() => startEdit(record, "status")}>{focusedCell?.id===record.id&&focusedCell?.field==="status"?renderCellValue(record,{key:"status",label:"",width:"",editable:true}):<span className={`px-2 py-0.5 rounded text-xs font-semibold ${statusCls}`}>{record.status}</span>}</td>
+                          <td className={`border ${tbodyBorder} px-3 py-2 text-sm ${t.t2} whitespace-nowrap`}>{formatDateRange(record)}</td>
+                          <td className={`border ${tbodyBorder} px-3 py-2 text-center font-semibold ${record.roi>=10?"text-green-600":record.roi>0?"text-amber-600":t.t4}`} onClick={()=>startEdit(record,"roi")}>{focusedCell?.id===record.id&&focusedCell?.field==="roi"?renderCellValue(record,{key:"roi",label:"",width:"",editable:true}):record.roi>0?record.roi.toFixed(2):"—"}</td>
+                          <td className={`border ${tbodyBorder} px-3 py-2 text-center ${t.t2}`} onClick={()=>startEdit(record,"cost_per_order")}>{focusedCell?.id===record.id&&focusedCell?.field==="cost_per_order"?renderCellValue(record,{key:"cost_per_order",label:"",width:"",editable:true}):record.cost_per_order>0?`$${record.cost_per_order.toFixed(2)}`:"—"}</td>
+                          <td className={`border ${tbodyBorder} px-3 py-2 text-center font-bold`} style={rateStyle} onClick={()=>startEdit(record,"ad_cost_rate")}>{focusedCell?.id===record.id&&focusedCell?.field==="ad_cost_rate"?renderCellValue(record,{key:"ad_cost_rate",label:"",width:"",editable:true}):`${record.ad_cost_rate?.toFixed(2)??"0"}%`}</td>
+                          <td className={`border ${tbodyBorder} px-3 py-2 text-center ${t.t2}`} onClick={()=>startEdit(record,"ad_spend")}>{focusedCell?.id===record.id&&focusedCell?.field==="ad_spend"?renderCellValue(record,{key:"ad_spend",label:"",width:"",editable:true}):record.ad_spend>0?`$${record.ad_spend.toFixed(2)}`:"—"}</td>
+                          <td className={`border ${tbodyBorder} px-3 py-2 text-center ${t.t2}`} onClick={()=>startEdit(record,"revenue")}>{focusedCell?.id===record.id&&focusedCell?.field==="revenue"?renderCellValue(record,{key:"revenue",label:"",width:"",editable:true}):record.revenue>0?`$${record.revenue.toLocaleString(undefined,{minimumFractionDigits:2})}`:"—"}</td>
+                          <td className={`border ${tbodyBorder} px-3 py-2 text-center ${t.t2}`} onClick={()=>startEdit(record,"campaign_budget")}>{focusedCell?.id===record.id&&focusedCell?.field==="campaign_budget"?renderCellValue(record,{key:"campaign_budget",label:"",width:"",editable:true}):record.campaign_budget>0?record.campaign_budget:"—"}</td>
+                          <td className={`border ${tbodyBorder} px-3 py-2 text-center ${t.t2}`} onClick={()=>startEdit(record,"budget_adjustment")}>{focusedCell?.id===record.id&&focusedCell?.field==="budget_adjustment"?renderCellValue(record,{key:"budget_adjustment",label:"",width:"",editable:true}):record.budget_adjustment||"—"}</td>
+                          <td className={`border ${tbodyBorder} px-3 py-2 ${t.t3} max-w-[160px] truncate`} onClick={()=>startEdit(record,"notes")}>{focusedCell?.id===record.id&&focusedCell?.field==="notes"?renderCellValue(record,{key:"notes",label:"",width:"",editable:true}):record.notes||"—"}</td>
+                          <td className={`border ${tbodyBorder} px-2 py-1 text-center`}><button onClick={()=>handleDelete(record.id)} className="text-red-500 hover:text-red-700 text-sm">🗑️</button></td>
                         </tr>
                       );
                     })}
@@ -727,7 +780,7 @@ export default function AdsPage() {
         )}
 
         {/* ── Regular store table ──────────────────────────────────────── */}
-        {!isSpecialTab && (
+        {activeTab !== "Weekend" && activeTab !== "Live" && (
         <div className={`${t.card} rounded-lg border ${t.divider} overflow-hidden`}>
           {loading ? (
             <div className={`text-center py-20 ${t.t4}`}>Loading...</div>
@@ -809,7 +862,7 @@ export default function AdsPage() {
                 <label className={`block text-sm font-medium ${t.t2} mb-1`}>Store</label>
                 <input value={activeTab} disabled className={`w-full px-4 py-2 border rounded-lg ${t.inp} opacity-60`} />
               </div>
-              {isSpecialTab ? (
+              {activeTab === "Live" ? (
                 <div className="space-y-3">
                   <div>
                     <label className={`block text-sm font-medium ${t.t2} mb-1`}>Date Range Start</label>
