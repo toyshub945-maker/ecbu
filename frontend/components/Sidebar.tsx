@@ -53,12 +53,26 @@ export default function Sidebar() {
         />
       )}
 
-      {/* Logo */}
-      <div className={`px-4 pt-4 pb-3 border-b ${t.divider}`}>
-        {/* Department header */}
-        <div className={`text-[9px] font-bold uppercase tracking-widest ${t.t4} mb-2.5 leading-tight`}>
+      {/* Department label + Dashboard */}
+      <div className={`px-4 pt-4 pb-2 border-b ${t.divider}`}>
+        <div className={`text-[9px] font-bold uppercase tracking-widest ${t.t4} mb-2 leading-tight`}>
           E-Commerce BU Department
         </div>
+        {!isShein && (
+          <Link
+            href="/dashboard"
+            className={`flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm transition-colors ${
+              pathname === "/dashboard" ? `${t.bar} ${t.t1} font-medium` : `${t.t3} hover:${t.bar} hover:${t.t2}`
+            }`}
+          >
+            <span className="text-base leading-none">📊</span>
+            <span>Dashboard</span>
+          </Link>
+        )}
+      </div>
+
+      {/* WorkFlow branding */}
+      <div className={`px-4 pt-3 pb-3 border-b ${t.divider}`}>
         <div className="flex items-center gap-2.5">
           <div className={`w-7 h-7 rounded-lg ${t.accentBg} flex items-center justify-center shrink-0`}>
             <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -140,10 +154,6 @@ export default function Sidebar() {
           <div className="pt-3 pb-1 px-2">
             <span className={`text-[10px] font-bold ${t.t5} uppercase tracking-widest`}>Manage</span>
           </div>
-
-          <NavItem href="/dashboard" active={pathname === "/dashboard"} icon="📊" t={t}>
-            Dashboard
-          </NavItem>
 
           <NavItem href="/products" active={pathname.startsWith("/products")} icon="🗂️" t={t}>
             Product Manager
