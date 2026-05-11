@@ -5,6 +5,7 @@ import io
 from typing import Optional
 
 import openpyxl
+from . import db
 
 
 def parse_restock_excel(file_content: bytes) -> dict:
@@ -134,12 +135,97 @@ def parse_restock_excel(file_content: bytes) -> dict:
             round(sku["total_orders"] / grand_total, 8) if grand_total > 0 else 0.0
         )
 
+    # Enrich with live DB data (warehouse stock + product prices)
+    _enrich_from_db(all_skus)
+
     return {
         "grand_total": grand_total,
         "sku_count": len(all_skus),
         "product_count": len({s["product_no"] for s in all_skus}),
         "skus": all_skus,
     }
+
+
+def _enrich_from_db(skus: list[dict]) -> None:
+    """
+    Mutates each sku dict in-place, overriding:
+      - current_stock  → SUM(stock_quantity) from warehouse_inventory grouped by sku
+      - selling_price  → average of tt1-tt4 prices from products table (matched by product_no)
+      - rr_rate        → return_qty / order_qty from rr tables (case-insensitive msku match)
+    profit_margin is kept from the Excel as the DB has no reliable source.
+    """
+    try:
+        with db.db_cursor() as cur:
+            # ── 1. Warehouse stock by SKU ─────────────────────────────────────
+            cur.execute("""
+                SELECT lower(sku) as sku_lower, SUM(stock_quantity) as total_qty
+                FROM warehouse_inventory
+                GROUP BY lower(sku)
+            """)
+            wh_stock: dict[str, int] = {
+                row["sku_lower"]: int(row["total_qty"] or 0)
+                for row in cur.fetchall()
+            }
+
+            # ── 2. Product selling price by product_no ────────────────────────
+            cur.execute("""
+                SELECT product_no,
+                       COALESCE(tt1_price, tt2_price, tt3_price, tt4_price) as price1,
+                       tt1_price, tt2_price, tt3_price, tt4_price
+                FROM products
+            """)
+            product_prices: dict[str, float] = {}
+            for row in cur.fetchall():
+                prices = [row[f"tt{i}_price"] for i in range(1, 5) if row[f"tt{i}_price"]]
+                if prices:
+                    product_prices[str(row["product_no"])] = round(sum(prices) / len(prices), 2)
+
+            # ── 3. R&R rate by msku (case-insensitive) ────────────────────────
+            cur.execute("""
+                SELECT lower(o.msku) as msku_lower,
+                       SUM(o.order_qty)  as total_orders,
+                       COALESCE(SUM(r.return_qty), 0) as total_returns
+                FROM rr_order_items o
+                LEFT JOIN rr_return_items r
+                    ON lower(r.msku) = lower(o.msku)
+                GROUP BY lower(o.msku)
+            """)
+            rr_map: dict[str, float] = {}
+            for row in cur.fetchall():
+                if row["total_orders"] and row["total_orders"] > 0:
+                    rr_map[row["msku_lower"]] = round(
+                        row["total_returns"] / row["total_orders"], 4
+                    )
+
+        # Apply enrichments
+        for s in skus:
+            sku_lower = s["sku"].lower()
+            prod_no = str(s["product_no"])
+
+            # Stock from warehouse (override Excel value)
+            if sku_lower in wh_stock:
+                s["current_stock"] = wh_stock[sku_lower]
+                s["stock_source"] = "warehouse_db"
+            else:
+                s["stock_source"] = "excel"
+
+            # Selling price from products table (override Excel value)
+            if prod_no in product_prices:
+                s["selling_price"] = product_prices[prod_no]
+                s["price_source"] = "products_db"
+            else:
+                s["price_source"] = "excel"
+
+            # R&R rate from rr tables (override Excel value if found)
+            if sku_lower in rr_map:
+                s["rr_rate"] = rr_map[sku_lower]
+                s["rr_source"] = "rr_db"
+            else:
+                s["rr_source"] = "excel"
+
+    except Exception:
+        # DB enrichment is best-effort; don't break the upload if it fails
+        pass
 
 
 def export_prediction_excel(skus: list[dict], months: list[dict], daily_prediction: float, prediction_days: int) -> bytes:

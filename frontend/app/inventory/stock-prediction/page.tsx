@@ -23,6 +23,10 @@ type SkuRow = {
   selling_price: number;
   profit_margin: number;
   rr_rate: number;
+  // source indicators
+  stock_source?: "warehouse_db" | "excel";
+  price_source?: "products_db" | "excel";
+  rr_source?: "rr_db" | "excel";
 };
 
 type MonthAllocation = {
@@ -315,6 +319,30 @@ export default function StockPredictionPage() {
                   <div>SKUs: <strong>{parsedData.sku_count}</strong></div>
                   <div>Total Orders: <strong>{parsedData.grand_total.toLocaleString()}</strong></div>
                 </div>
+                {/* Data source summary */}
+                <div className="mt-2 pt-2 border-t border-emerald-200 space-y-1">
+                  <div className="font-semibold text-emerald-800">Data Sources:</div>
+                  {(() => {
+                    const wh = parsedData.skus.filter(s => s.stock_source === "warehouse_db").length;
+                    const pr = parsedData.skus.filter(s => s.price_source === "products_db").length;
+                    return (
+                      <>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-2 h-2 rounded-full ${wh > 0 ? "bg-emerald-500" : "bg-gray-400"}`}/>
+                          <span>Now Stock: {wh > 0 ? `${wh} SKUs from Warehouse DB` : "from Excel"}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-2 h-2 rounded-full ${pr > 0 ? "bg-blue-500" : "bg-gray-400"}`}/>
+                          <span>Price: {pr > 0 ? `${pr} SKUs from Products DB` : "from Excel"}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-orange-400"/>
+                          <span>Profit Margin / R&R: from Excel</span>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
               </div>
             )}
           </div>
@@ -515,7 +543,10 @@ export default function StockPredictionPage() {
                         )}
                         <th className={`px-3 py-2.5 text-right font-semibold ${t.t2}`}>Total Orders</th>
                         <th className={`px-3 py-2.5 text-right font-semibold ${t.t2}`}>Quota %</th>
-                        <th className={`px-3 py-2.5 text-right font-semibold ${t.t2}`}>Now Stock</th>
+                        <th className={`px-3 py-2.5 text-right font-semibold ${t.t2} whitespace-nowrap`}>
+                          Now Stock
+                          <span className="ml-1 text-[9px] text-emerald-600 font-normal">🏠WH</span>
+                        </th>
                         <th className={`px-3 py-2.5 text-right font-semibold text-blue-600 border-l ${t.divider}`}>
                           Expected Demand
                         </th>
@@ -528,6 +559,16 @@ export default function StockPredictionPage() {
                             {m.label} ({m.pct}%)
                           </th>
                         ))}
+                        <th className={`px-3 py-2.5 text-right font-semibold whitespace-nowrap border-l ${t.divider}`} style={{ color: "#0891b2" }}>
+                          Selling Price
+                          <span className="ml-1 text-[9px] font-normal">💰</span>
+                        </th>
+                        <th className={`px-3 py-2.5 text-right font-semibold whitespace-nowrap`} style={{ color: "#059669" }}>
+                          Profit %
+                        </th>
+                        <th className={`px-3 py-2.5 text-right font-semibold whitespace-nowrap`} style={{ color: "#dc2626" }}>
+                          R&R %
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -590,6 +631,25 @@ export default function StockPredictionPage() {
                                 {fmtNum(prodExpected * m.pct / 100, 0)}
                               </td>
                             ))}
+                            {/* Avg selling price for product */}
+                            <td className={`px-3 py-2 text-right font-semibold border-l ${t.divider}`} style={{ color: "#0891b2" }}>
+                              {(() => {
+                                const prices = prodSkus.map(s => s.selling_price).filter(p => p > 0);
+                                return prices.length > 0 ? `$${(prices.reduce((a,b)=>a+b,0)/prices.length).toFixed(2)}` : "—";
+                              })()}
+                            </td>
+                            <td className={`px-3 py-2 text-right font-semibold`} style={{ color: "#059669" }}>
+                              {(() => {
+                                const margins = prodSkus.map(s => s.profit_margin).filter(p => p > 0);
+                                return margins.length > 0 ? `${(margins.reduce((a,b)=>a+b,0)/margins.length*100).toFixed(1)}%` : "—";
+                              })()}
+                            </td>
+                            <td className={`px-3 py-2 text-right font-semibold`} style={{ color: "#dc2626" }}>
+                              {(() => {
+                                const rates = prodSkus.map(s => s.rr_rate).filter(p => p > 0);
+                                return rates.length > 0 ? `${(rates.reduce((a,b)=>a+b,0)/rates.length*100).toFixed(1)}%` : "—";
+                              })()}
+                            </td>
                           </tr>,
 
                           // SKU rows (only if expanded)
@@ -629,6 +689,31 @@ export default function StockPredictionPage() {
                                     {mp.value > 0 ? fmtNum(mp.value) : <span className={`${t.t5} text-[10px]`}>—</span>}
                                   </td>
                                 ))}
+                                {/* Selling Price */}
+                                <td className={`px-3 py-2 text-right border-l ${t.divider}`}>
+                                  {sku.selling_price > 0 ? (
+                                    <span style={{ color: "#0891b2" }}>
+                                      ${sku.selling_price.toFixed(2)}
+                                      {sku.price_source === "products_db" && (
+                                        <span className="ml-1 text-[9px] text-emerald-600">●</span>
+                                      )}
+                                    </span>
+                                  ) : <span className={`${t.t5} text-[10px]`}>—</span>}
+                                </td>
+                                {/* Profit Margin */}
+                                <td className="px-3 py-2 text-right">
+                                  {sku.profit_margin > 0 ? (
+                                    <span style={{ color: "#059669" }}>
+                                      {(sku.profit_margin * 100).toFixed(1)}%
+                                    </span>
+                                  ) : <span className={`${t.t5} text-[10px]`}>—</span>}
+                                </td>
+                                {/* R&R Rate */}
+                                <td className="px-3 py-2 text-right">
+                                  {sku.rr_rate > 0 ? (
+                                    <RRCell rate={sku.rr_rate} source={sku.rr_source} />
+                                  ) : <span className={`${t.t5} text-[10px]`}>—</span>}
+                                </td>
                               </tr>
                             );
                           }) : []),
@@ -673,6 +758,9 @@ export default function StockPredictionPage() {
                             {fmtNum(dailyPrediction * predictionDays * m.pct / 100, 0)}
                           </td>
                         ))}
+                        <td className={`px-3 py-2.5 text-right border-l ${t.divider} ${t.t4}`}>—</td>
+                        <td className={`px-3 py-2.5 text-right ${t.t4}`}>—</td>
+                        <td className={`px-3 py-2.5 text-right ${t.t4}`}>—</td>
                       </tr>
                     </tfoot>
                   </table>
@@ -683,6 +771,21 @@ export default function StockPredictionPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── R&R cell — color-coded by rate ──────────────────────────────────────────
+
+function RRCell({ rate, source }: { rate: number; source?: string }) {
+  const pct = rate * 100;
+  let color = "#059669"; // green < 10%
+  if (pct >= 20) color = "#dc2626";
+  else if (pct >= 10) color = "#d97706";
+  return (
+    <span style={{ color }}>
+      {pct.toFixed(1)}%
+      {source === "rr_db" && <span className="ml-1 text-[9px] text-emerald-600">●</span>}
+    </span>
   );
 }
 
