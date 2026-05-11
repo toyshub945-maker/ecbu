@@ -1306,18 +1306,23 @@ function AdsCreativeTab() {
 
                     {/* Videos — shown AFTER product cards */}
                     {product.videos.length > 0 && (() => {
-                      const delivering  = product.videos.filter(v => v.status === "Delivering").length;
-                      const trendingCount = product.videos.filter(v => v.sku_orders > 0).length;
-                      const isTrendingOn  = trendingFilter.has(product.product_no);
+                      const delivering     = product.videos.filter(v => v.status === "Delivering").length;
+                      // 🔥 Trending  = has orders AND cost/order < $1
+                      // ⭐ Performing = has orders AND cost/order >= $1
+                      const isTrendingVid  = (v: CreativeEntry) => v.sku_orders > 0 && v.cost_per_order > 0 && v.cost_per_order < 1;
+                      const isPerformingVid = (v: CreativeEntry) => v.sku_orders > 0 && !(v.cost_per_order > 0 && v.cost_per_order < 1);
+                      const trendingCount  = product.videos.filter(isTrendingVid).length;
+                      const performingCount = product.videos.filter(isPerformingVid).length;
+                      const isTrendingOn   = trendingFilter.has(product.product_no);
                       const displayedVideos = isTrendingOn
-                        ? product.videos.filter(v => v.sku_orders > 0)
+                        ? product.videos.filter(isTrendingVid)
                         : product.videos;
 
                       return (
                         <div className={product.product_cards.length > 0 ? `border-t ${t.divider}` : ""}>
 
                           {/* ── Videos section header ── */}
-                          <div className={`flex items-center gap-2 px-4 py-2 ${dark ? "bg-white/5" : "bg-gray-50"} border-b ${t.divider}`}>
+                          <div className={`flex items-center gap-2 px-4 py-2 ${dark ? "bg-white/5" : "bg-gray-50"} border-b ${t.divider} flex-wrap`}>
                             <span className="text-xs">🎬</span>
                             <span className={`text-xs font-bold uppercase tracking-wider ${t.t3}`}>Videos</span>
                             <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${t.bar} ${t.t4}`}>
@@ -1329,9 +1334,8 @@ function AdsCreativeTab() {
                               <span className="text-[10px] text-green-600 font-semibold">{delivering} delivering</span></>
                             )}
 
+                            {/* 🔥 Trending pill — clickable filter */}
                             <span className={`text-[10px] ${t.t4}`}>·</span>
-
-                            {/* Trending pill — click to toggle filter */}
                             {trendingCount > 0 ? (
                               <button
                                 onClick={e => {
@@ -1348,10 +1352,16 @@ function AdsCreativeTab() {
                                     ? "bg-rose-500 text-white border-rose-500 shadow-sm"
                                     : "bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100"
                                 }`}>
-                                🔥 {trendingCount} Trending {isTrendingOn ? "· show all" : "· filter"}
+                                🔥 {trendingCount} Trending{isTrendingOn ? " · show all" : ""}
                               </button>
                             ) : (
                               <span className={`text-[10px] ${t.t4}`}>0 trending</span>
+                            )}
+
+                            {/* ⭐ Performing count (orders but cost/order ≥ $1) */}
+                            {performingCount > 0 && (
+                              <><span className={`text-[10px] ${t.t4}`}>·</span>
+                              <span className="text-[10px] font-semibold text-blue-500">⭐ {performingCount} performing</span></>
                             )}
                           </div>
 
@@ -1373,11 +1383,12 @@ function AdsCreativeTab() {
                               </thead>
                               <tbody>
                                 {displayedVideos.map((v, i) => {
-                                  const badge      = getCreativeBadge(v);
-                                  const isTrending = v.sku_orders > 0;
-                                  const rowBg      = i % 2 === 1 ? (dark ? "bg-white/[0.02]" : "bg-gray-50/50") : "";
+                                  const badge        = getCreativeBadge(v);
+                                  const vidTrending  = isTrendingVid(v);   // orders > 0 AND cost/order < $1
+                                  const vidPerforming = isPerformingVid(v); // orders > 0 AND cost/order ≥ $1
+                                  const rowBg        = i % 2 === 1 ? (dark ? "bg-white/[0.02]" : "bg-gray-50/50") : "";
 
-                                  // Single action badge: priority = excluded > auth > trending > add budget > —
+                                  // Single action badge — priority: Exclude > Auth > Trending > Performing > —
                                   const actionBadge = (() => {
                                     if (badge?.type === "excluded") return (
                                       <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-red-100 text-red-700 border border-red-300">🚫 Exclude</span>
@@ -1385,11 +1396,11 @@ function AdsCreativeTab() {
                                     if (badge?.type === "auth") return (
                                       <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-300">🔑 Auth Needed</span>
                                     );
-                                    if (isTrending) return (
+                                    if (vidTrending) return (
                                       <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-rose-100 text-rose-600 border border-rose-200">🔥 Trending</span>
                                     );
-                                    if (badge?.type === "budget") return (
-                                      <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-green-100 text-green-700 border border-green-300">💰 Add Budget</span>
+                                    if (vidPerforming) return (
+                                      <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-blue-100 text-blue-600 border border-blue-200">⭐ Performing</span>
                                     );
                                     return <span className={`text-[10px] ${t.t5}`}>—</span>;
                                   })();
