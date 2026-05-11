@@ -271,31 +271,37 @@ export default function AdsPage() {
     }
   };
 
-  const startEdit = (record: AdRecord, field: string) => {
-    if (!EDITABLE_FIELDS.includes(field)) return;
-    setFocusedCell({ id: record.id, field });
-    const value = record[field as keyof AdRecord];
-    setEditValue(value === null || value === undefined ? "" : String(value));
-  };
+  const NUMERIC_FIELDS = ["roi", "cost_per_order", "ad_cost_rate", "ad_spend", "revenue", "campaign_budget", "total_funds", "profit"];
 
-  const saveEdit = async () => {
-    if (!focusedCell) return;
-    const { id, field } = focusedCell;
-    let value: string | number = editValue;
-    if (["roi", "cost_per_order", "ad_cost_rate", "ad_spend", "revenue", "campaign_budget", "total_funds", "profit"].includes(field)) {
-      value = parseFloat(editValue) || 0;
-    }
+  // Core save — does NOT read state, all params explicit
+  const saveEditDirect = async (id: number, field: string, rawValue: string) => {
+    const value: string | number = NUMERIC_FIELDS.includes(field) ? (parseFloat(rawValue) || 0) : rawValue;
     try {
       await fetch(backendUrl(`/api/ads/${id}`), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ [field]: value }),
       });
-      setFocusedCell(null);
       fetchAds();
-    } catch (e) {
+    } catch {
       setError("Update failed");
     }
+  };
+
+  const startEdit = (record: AdRecord, field: string) => {
+    if (!EDITABLE_FIELDS.includes(field)) return;
+    const value = record[field as keyof AdRecord];
+    setEditValue(value === null || value === undefined ? "" : String(value));
+    setFocusedCell({ id: record.id, field });
+  };
+
+  // Save using current focusedCell + editValue (for onBlur)
+  const saveEdit = () => {
+    if (!focusedCell) return;
+    const { id, field } = focusedCell;
+    const snapshot = editValue;          // capture before state clears
+    setFocusedCell(null);
+    saveEditDirect(id, field, snapshot);
   };
 
   const cancelEdit = () => {
@@ -304,52 +310,52 @@ export default function AdsPage() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent, record: AdRecord, field: string) => {
-    if (focusedCell) {
-      if (e.key === "Enter" || e.key === "Tab") {
+    const isEditing = focusedCell?.id === record.id && focusedCell?.field === field;
+
+    if (isEditing) {
+      if (e.key === "Escape") { e.preventDefault(); cancelEdit(); return; }
+      if (e.key === "Enter") { e.preventDefault(); saveEdit(); return; }
+      if (e.key === "Tab") {
         e.preventDefault();
-        saveEdit();
-        if (e.key === "Tab" && !e.shiftKey) {
+        const snapshot = editValue;
+        setFocusedCell(null);
+        saveEditDirect(record.id, field, snapshot);   // fire-and-forget, no race
+        if (!e.shiftKey) {
           const colIdx = COLUMNS.findIndex(c => c.key === field);
-          if (colIdx < COLUMNS.length - 1) {
-            const nextField = COLUMNS[colIdx + 1].key;
-            if (EDITABLE_FIELDS.includes(nextField)) {
-              setTimeout(() => startEdit(record, nextField), 10);
-            }
-          }
+          const nextCol = COLUMNS.slice(colIdx + 1).find(c => EDITABLE_FIELDS.includes(c.key));
+          if (nextCol) { startEdit(record, nextCol.key); }
+        } else {
+          const colIdx = COLUMNS.findIndex(c => c.key === field);
+          const prevCols = COLUMNS.slice(0, colIdx).reverse();
+          const prevCol = prevCols.find(c => EDITABLE_FIELDS.includes(c.key));
+          if (prevCol) { startEdit(record, prevCol.key); }
         }
-      } else if (e.key === "Escape") {
-        cancelEdit();
+        return;
       }
-      return;
+      return;   // let other keys (typing) pass through to the input
     }
 
+    // Not editing — navigation shortcuts
     const colIdx = COLUMNS.findIndex(c => c.key === field);
-    const currentRecordIdx = displayedAds.findIndex(r => r.id === record.id);
+    const rowIdx = displayedAds.findIndex(r => r.id === record.id);
 
     if (e.key === "Enter" || e.key === "F2") {
-      e.preventDefault();
-      startEdit(record, field);
-    } else if (e.key === "ArrowUp" && currentRecordIdx > 0) {
-      e.preventDefault();
-      setFocusedCell({ id: displayedAds[currentRecordIdx - 1].id, field });
-    } else if (e.key === "ArrowDown" && currentRecordIdx < displayedAds.length - 1) {
-      e.preventDefault();
-      setFocusedCell({ id: displayedAds[currentRecordIdx + 1].id, field });
+      e.preventDefault(); startEdit(record, field);
+    } else if (e.key === "ArrowUp" && rowIdx > 0) {
+      e.preventDefault(); setFocusedCell({ id: displayedAds[rowIdx - 1].id, field });
+    } else if (e.key === "ArrowDown" && rowIdx < displayedAds.length - 1) {
+      e.preventDefault(); setFocusedCell({ id: displayedAds[rowIdx + 1].id, field });
     } else if (e.key === "ArrowLeft" && colIdx > 0) {
-      e.preventDefault();
-      setFocusedCell({ id: record.id, field: COLUMNS[colIdx - 1].key });
+      e.preventDefault(); setFocusedCell({ id: record.id, field: COLUMNS[colIdx - 1].key });
     } else if (e.key === "ArrowRight" && colIdx < COLUMNS.length - 1) {
-      e.preventDefault();
-      setFocusedCell({ id: record.id, field: COLUMNS[colIdx + 1].key });
+      e.preventDefault(); setFocusedCell({ id: record.id, field: COLUMNS[colIdx + 1].key });
     } else if (e.ctrlKey && e.key === "c") {
       e.preventDefault();
-      const value = record[field as keyof AdRecord];
-      setCopiedCell({ value: String(value || ""), id: record.id, field });
+      setCopiedCell({ value: String(record[field as keyof AdRecord] ?? ""), id: record.id, field });
     } else if (e.ctrlKey && e.key === "v" && copiedCell) {
       e.preventDefault();
-      setEditValue(copiedCell.value);
-      setFocusedCell({ id: record.id, field });
-      saveEdit();
+      // Paste: save directly — no state dependency
+      saveEditDirect(record.id, field, copiedCell.value);
     }
   };
 
@@ -402,20 +408,22 @@ export default function AdsPage() {
 
   const handleBulkEdit = async () => {
     if (selectedIds.size === 0 || !bulkEditValue) return;
+    const NUMERIC_FIELDS_BULK = ["roi", "cost_per_order", "ad_cost_rate", "ad_spend", "revenue", "campaign_budget", "total_funds", "profit"];
+    const parsedValue = NUMERIC_FIELDS_BULK.includes(bulkEditField) ? (parseFloat(bulkEditValue) || 0) : bulkEditValue;
     try {
-      for (const id of selectedIds) {
-        await fetch(backendUrl(`/api/ads/${id}`), {
+      await Promise.all([...selectedIds].map(id =>
+        fetch(backendUrl(`/api/ads/${id}`), {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ [bulkEditField]: bulkEditValue }),
-        });
-      }
+          body: JSON.stringify({ [bulkEditField]: parsedValue }),
+        })
+      ));
       setSelectedIds(new Set());
       setShowBulkEdit(false);
       setBulkEditValue("");
       fetchAds();
       setSuccess(`Updated ${selectedIds.size} records`);
-    } catch (e) {
+    } catch {
       setError("Bulk edit failed");
     }
   };
