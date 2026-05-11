@@ -881,10 +881,10 @@ def get_tiktok_export_list(store_code: str, source: Optional[str] = None, _: dic
                 SELECT period_start, period_end, COUNT(*) as product_count,
                        SUM(gmv) as total_gmv, MAX(imported_at) as imported_at
                 FROM tiktok_export_analytics
-                WHERE store_code=? AND (source=? OR (source IS NULL AND ?='pm'))
+                WHERE store_code=? AND source=?
                 GROUP BY period_start, period_end
                 ORDER BY period_start DESC
-            """, (store_code, source, source))
+            """, (store_code, source))
         else:
             cur.execute("""
                 SELECT period_start, period_end, COUNT(*) as product_count,
@@ -924,8 +924,8 @@ def delete_tiktok_export(
             cur.execute("""
                 DELETE FROM tiktok_export_analytics
                 WHERE store_code=? AND period_start=? AND period_end=?
-                AND (source=? OR (source IS NULL AND ?='pm'))
-            """, (store_code, period_start, period_end, source, source))
+                AND source=?
+            """, (store_code, period_start, period_end, source))
         else:
             cur.execute("""
                 DELETE FROM tiktok_export_analytics
@@ -2779,7 +2779,7 @@ def pm_list_products(q: str = "", _: dict = Depends(auth.get_current_user)):
             WITH latest AS (
                 SELECT product_no, MAX(period_start) AS mp
                 FROM tiktok_export_analytics
-                WHERE product_no IN ({ph}) AND (source='pm' OR source IS NULL)
+                WHERE product_no IN ({ph}) AND source='pm'
                 GROUP BY product_no
             )
             SELECT t.product_no,
@@ -2788,7 +2788,7 @@ def pm_list_products(q: str = "", _: dict = Depends(auth.get_current_user)):
                    l.mp                        AS period
             FROM tiktok_export_analytics t
             JOIN latest l ON t.product_no=l.product_no AND t.period_start=l.mp
-            WHERE t.source='pm' OR t.source IS NULL
+            WHERE t.source='pm'
             GROUP BY t.product_no
         """, pnos)
         orders_map = {r["product_no"]: {"orders": r["total_orders"] or 0,
@@ -2878,7 +2878,7 @@ def pm_product_detail(product_no: str, _: dict = Depends(auth.get_current_user))
                    COALESCE(items_sold,0) AS items_sold, COALESCE(refunds,0) AS refunds,
                    COALESCE(ctr,0) AS ctr
             FROM tiktok_export_analytics
-            WHERE product_no=? AND (source='pm' OR source IS NULL)
+            WHERE product_no=? AND source='pm'
             ORDER BY period_start ASC
         """, (product_no,))
         raw_monthly = [dict(r) for r in cur.fetchall()]
