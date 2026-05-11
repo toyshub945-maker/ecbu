@@ -611,7 +611,10 @@ function DetailPanel({ productNo, onClose, t }: { productNo: string; onClose: ()
     {key:"rr",      icon:"↩️",label:"R&R Rate"},
   ] as const;
 
-  const perf = detail ? PERF[detail.performance] : null;
+  const detailPerf: PerfTier | null = detail
+    ? (!detail.latest_orders && !detail.monthly.length ? "none" : detail.performance)
+    : null;
+  const perf = detailPerf ? PERF[detailPerf] : null;
 
   return (
     <div className={`flex flex-col h-full ${t.card}`}>
@@ -707,7 +710,7 @@ function DetailPanel({ productNo, onClose, t }: { productNo: string; onClose: ()
 // ─── Product List Item ────────────────────────────────────────────────────────
 function ProductItem({ p, active, onClick, t }: { p: PMProduct; active: boolean; onClick: () => void; t: ThemeDef }) {
   const { themeKey } = useTheme();
-  const perf = PERF[p.performance];
+  const perf = PERF[getPerf(p)];
   return (
     <button onClick={onClick}
       className={`w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group border ${
@@ -737,6 +740,12 @@ function ProductItem({ p, active, onClick, t }: { p: PMProduct; active: boolean;
       )}
     </button>
   );
+}
+
+// ─── Client-side perf override — never trust "low" when there's no data ──────
+function getPerf(p: PMProduct): PerfTier {
+  if (!p.latest_period && p.total_orders === 0 && p.total_gmv === 0) return "none";
+  return p.performance === "none" ? "none" : p.performance;
 }
 
 // ─── Module-level cache (survives tab navigation, cleared on upload) ──────────
@@ -784,13 +793,13 @@ export default function ProductManagerPage() {
   useEffect(() => { const x = setTimeout(()=>setSearch(q),300); return()=>clearTimeout(x); }, [q]);
 
   const counts = {
-    high:    products.filter(p=>p.performance==="high").length,
-    mid:     products.filter(p=>p.performance==="mid").length,
-    growing: products.filter(p=>p.performance==="growing").length,
-    low:     products.filter(p=>p.performance==="low").length,
-    none:    products.filter(p=>p.performance==="none").length,
+    high:    products.filter(p=>getPerf(p)==="high").length,
+    mid:     products.filter(p=>getPerf(p)==="mid").length,
+    growing: products.filter(p=>getPerf(p)==="growing").length,
+    low:     products.filter(p=>getPerf(p)==="low").length,
+    none:    products.filter(p=>getPerf(p)==="none").length,
   };
-  const filtered = perfFilter==="all" ? products : products.filter(p=>p.performance===perfFilter);
+  const filtered = perfFilter==="all" ? products : products.filter(p=>getPerf(p)===perfFilter);
 
   return (
     <>
