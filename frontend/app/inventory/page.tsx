@@ -35,6 +35,14 @@ const APPS = [
     href: "/inventory/shein",
     status: "ready",
   },
+  {
+    id: "stock-prediction",
+    title: "Stock Prediction",
+    description: "Upload restock demand Excel to predict per-SKU stock needs by month",
+    icon: "📦",
+    href: "/inventory/stock-prediction",
+    status: "ready",
+  },
 ];
 
 export default function InventoryPage() {

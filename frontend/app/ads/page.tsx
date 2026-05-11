@@ -204,7 +204,7 @@ export default function AdsPage() {
       const res = await fetch(backendUrl("/api/ads/weekend-row"), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ store_name: "Weekend", product_number: row.product_number, date: weekendDate, ...row }),
+        body: JSON.stringify({ store_name: "Weekend", date: weekendDate, ...row }),
       });
       const data = await res.json();
       if (data.id) {

@@ -20,6 +20,7 @@ from .process_shein import process_uploaded_files as process_shein_files, proces
 from .feishu import fetch_warehouse_inventory
 from . import warehouse
 from . import ads
+from . import stock_prediction as sp
 
 db.init_db()
 auth.ensure_admin_exists()
@@ -3046,3 +3047,40 @@ def pm_product_detail(product_no: str, _: dict = Depends(auth.get_current_user))
         "performance": _pm_perf_with_data(latest_orders, has_data),
         "latest_orders": latest_orders,
     }
+
+
+# ─── Stock Prediction ─────────────────────────────────────────────────────────
+
+class MonthAllocation(BaseModel):
+    label: str
+    pct: float
+
+class PredictionExportRequest(BaseModel):
+    skus: list[dict]
+    months: list[MonthAllocation]
+    daily_prediction: float = 60
+    prediction_days: int = 90
+
+
+@app.post("/api/stock-prediction/upload")
+async def stock_prediction_upload(file: UploadFile = File(...)):
+    """Parse a restock demand Excel and return per-SKU orders data."""
+    content = await file.read()
+    try:
+        result = sp.parse_restock_excel(content)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to parse Excel: {e}")
+
+
+@app.post("/api/stock-prediction/export")
+async def stock_prediction_export(req: PredictionExportRequest):
+    """Generate and stream a prediction result Excel."""
+    from fastapi.responses import Response
+    months = [{"label": m.label, "pct": m.pct} for m in req.months]
+    xlsx = sp.export_prediction_excel(req.skus, months, req.daily_prediction, req.prediction_days)
+    return Response(
+        content=xlsx,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=stock_prediction.xlsx"},
+    )
