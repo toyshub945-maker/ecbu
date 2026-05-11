@@ -1,4 +1,5 @@
 import pandas as pd
+import io
 from . import db, config
 from datetime import datetime
 
@@ -21,7 +22,7 @@ def get_store_name_from_sheet(sheet_name: str) -> str:
 
 
 def parse_ads_excel(file_content: bytes, store_name: str, date: str) -> list[dict]:
-    df = pd.read_excel(file_content)
+    df = pd.read_excel(io.BytesIO(file_content))
     records = []
     
     for _, row in df.iterrows():

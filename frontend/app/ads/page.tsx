@@ -443,11 +443,11 @@ export default function AdsPage() {
   };
 
   const dark = themeKey !== "light";
-  const borderCls = t.divider;
-  const theadBg = t.bar.split(" ")[0];
-  const theadText = t.t3;
-  const tbodyBorder = t.divider;
-  const hoverRow = `hover:bg-violet-500/10`;
+  const borderCls = dark ? "border-slate-700" : "border-amber-200";
+  const theadBg   = dark ? "bg-amber-900/60" : "bg-amber-400";
+  const theadText = dark ? "text-amber-100"  : "text-amber-900";
+  const tbodyBorder = dark ? "border-slate-700" : "border-amber-100";
+  const hoverRow  = dark ? "hover:bg-amber-900/20" : "hover:bg-amber-50/60";
   const inputCls = `${t.inp} rounded-lg text-sm`;
   const selectCls = `${t.inp} rounded-lg text-sm`;
 
@@ -592,21 +592,21 @@ export default function AdsPage() {
               <table className="w-full border-collapse text-sm">
                 <thead className={`${theadBg} sticky top-0 z-10`}>
                   <tr>
-                    <th className={`border ${borderCls} px-2 py-2 text-left ${theadBg} w-10`}>
+                    <th className={`border ${borderCls} px-2 py-2.5 text-left ${theadBg} w-10`}>
                       <input type="checkbox" checked={selectedIds.size === displayedAds.length && displayedAds.length > 0} onChange={toggleSelectAll} className="w-4 h-4" />
                     </th>
                     {COLUMNS.map(col => (
-                      <th key={col.key} className={`border ${borderCls} px-2 py-2 text-left ${theadBg} text-xs font-semibold ${theadText} uppercase ${col.width}`}>
+                      <th key={col.key} className={`border ${borderCls} px-3 py-2.5 text-left ${theadBg} text-xs font-bold ${theadText} uppercase tracking-wide ${col.width}`}>
                         {col.label}
                       </th>
                     ))}
-                    <th className={`border ${borderCls} px-2 py-2 text-center ${theadBg} w-16`}>🗑️</th>
+                    <th className={`border ${borderCls} px-2 py-2.5 text-center ${theadBg} w-16 ${theadText}`}>Delete</th>
                   </tr>
                 </thead>
                 <tbody>
                   {displayedAds.map(record => (
                     <tr key={record.id} className={hoverRow}>
-                      <td className={`border ${tbodyBorder} px-2 py-1 text-center`}>
+                      <td className={`border ${tbodyBorder} px-2 py-2 text-center`}>
                         <input type="checkbox" checked={selectedIds.has(record.id)} onChange={() => toggleSelect(record.id)} className="w-4 h-4" />
                       </td>
                       {COLUMNS.map(col => {
@@ -614,10 +614,10 @@ export default function AdsPage() {
                         return (
                           <td
                             key={col.key}
-                            className={`border ${tbodyBorder} px-2 py-2 ${col.width} ${isEditable ? "cursor-text" : ""}`}
+                            className={`border ${tbodyBorder} px-3 py-2 ${col.width} ${isEditable ? "cursor-text" : ""}`}
                           >
                             <div
-                              className={`w-full h-full ${isEditable ? `cursor-pointer ${dark ? "hover:bg-slate-700" : "hover:bg-blue-50"} rounded px-1` : ""}`}
+                              className={`w-full h-full ${isEditable ? `cursor-pointer ${dark ? "hover:bg-amber-900/30" : "hover:bg-amber-50"} rounded px-1` : ""}`}
                               onClick={e => { if (isEditable) { e.stopPropagation(); startEdit(record, col.key); } }}
                             >
                               {renderCellValue(record, col)}
