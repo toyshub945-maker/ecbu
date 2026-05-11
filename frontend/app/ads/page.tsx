@@ -447,12 +447,25 @@ export default function AdsPage() {
       if (field === "status") {
         return (
           <select
-            className={`w-full h-full px-2 border-2 border-blue-500 ${t.card} text-sm`}
+            className={`w-full h-full px-2 border-2 border-blue-500 ${t.card} text-sm rounded`}
             value={editValue}
-            onChange={e => setEditValue(e.target.value)}
-            onBlur={saveEdit}
-            onKeyDown={e => handleKeyDown(e, record, field)}
             autoFocus
+            onChange={async e => {
+              const newVal = e.target.value;
+              setEditValue(newVal);
+              // Save immediately — onBlur fires before onChange in some browsers, so we save here
+              try {
+                await fetch(backendUrl(`/api/ads/${record.id}`), {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ status: newVal }),
+                });
+                setFocusedCell(null);
+                fetchAds();
+              } catch { setError("Update failed"); }
+            }}
+            onKeyDown={e => { if (e.key === "Escape") cancelEdit(); }}
+            onBlur={() => setFocusedCell(null)}
           >
             <option value="Active">Active</option>
             <option value="Paused">Paused</option>
