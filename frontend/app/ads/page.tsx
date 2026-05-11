@@ -2,7 +2,6 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import Sidebar from "@/components/Sidebar";
 import { useTheme } from "@/components/ThemeProvider";
-import type { ThemeDef } from "@/lib/theme";
 import { api } from "@/lib/api";
 
 function backendUrl(path: string) {
@@ -68,20 +67,13 @@ const COLUMNS = [
   { key: "notes", label: "Notes", width: "w-40", editable: true },
 ];
 
-function getAdCostRateColor(rate: number, t: ThemeDef): string {
-  if (rate <= 5) return "bg-green-50";
-  if (rate > 5 && rate <= 6) return "bg-pink-50";
-  if (rate > 6 && rate <= 7) return "bg-pink-100";
-  if (rate > 7 && rate <= 9) return "bg-orange-50";
-  return "bg-red-50";
-}
-
-function getAdCostRateTextColor(rate: number): string {
-  if (rate <= 5) return "text-green-700";
-  if (rate > 5 && rate <= 6) return "text-pink-700";
-  if (rate > 6 && rate <= 7) return "text-pink-800";
-  if (rate > 7 && rate <= 9) return "text-orange-700";
-  return "text-red-700";
+function getAdCostRateCellStyle(rate: number): React.CSSProperties {
+  if (rate <= 5)  return { backgroundColor: "#4CAF50", color: "#fff" };
+  if (rate <= 6)  return { backgroundColor: "#FFE0B2", color: "#BF360C" };
+  if (rate <= 7)  return { backgroundColor: "#FFCC80", color: "#E65100" };
+  if (rate <= 8)  return { backgroundColor: "#FFA726", color: "#fff" };
+  if (rate <= 9)  return { backgroundColor: "#FF7043", color: "#fff" };
+  return           { backgroundColor: "#F44336", color: "#fff" };
 }
 
 function getBudgetAdjustmentColor(adjustment: string, budget: number): string {
@@ -419,7 +411,7 @@ export default function AdsPage() {
     }
     if (field === "ad_cost_rate") {
       const rate = value as number;
-      return <span className={`px-2 py-0.5 rounded text-xs font-medium ${getAdCostRateColor(rate, t)} ${getAdCostRateTextColor(rate)}`}>{rate?.toFixed(1) ?? "0"}%</span>;
+      return <span className="font-bold text-sm">{rate?.toFixed(1) ?? "0"}%</span>;
     }
     if (field === "budget_adjustment") {
       const colorClass = getBudgetAdjustmentColor(value as string, record.campaign_budget);
@@ -611,13 +603,16 @@ export default function AdsPage() {
                       </td>
                       {COLUMNS.map(col => {
                         const isEditable = col.editable && EDITABLE_FIELDS.includes(col.key);
+                        const isRateCol = col.key === "ad_cost_rate";
+                        const rateCellStyle = isRateCol ? getAdCostRateCellStyle(record.ad_cost_rate) : undefined;
                         return (
                           <td
                             key={col.key}
-                            className={`border ${tbodyBorder} px-3 py-2 ${col.width} ${isEditable ? "cursor-text" : ""}`}
+                            className={`border ${tbodyBorder} px-3 py-2 ${col.width} ${isEditable ? "cursor-text" : ""} ${isRateCol ? "text-center font-bold" : ""}`}
+                            style={rateCellStyle}
                           >
                             <div
-                              className={`w-full h-full ${isEditable ? `cursor-pointer ${dark ? "hover:bg-amber-900/30" : "hover:bg-amber-50"} rounded px-1` : ""}`}
+                              className={`w-full h-full ${isEditable && !isRateCol ? `cursor-pointer ${dark ? "hover:bg-amber-900/30" : "hover:bg-amber-50"} rounded px-1` : isEditable ? "cursor-pointer rounded px-1 hover:opacity-80" : ""}`}
                               onClick={e => { if (isEditable) { e.stopPropagation(); startEdit(record, col.key); } }}
                             >
                               {renderCellValue(record, col)}
