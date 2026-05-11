@@ -21,6 +21,7 @@ from .feishu import fetch_warehouse_inventory
 from . import warehouse
 from . import ads
 from . import stock_prediction as sp
+from . import erp_orders as erp
 
 db.init_db()
 auth.ensure_admin_exists()
@@ -3084,3 +3085,42 @@ async def stock_prediction_export(req: PredictionExportRequest):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=stock_prediction.xlsx"},
     )
+
+
+# ─── ERP Order Uploads ────────────────────────────────────────────────────────
+
+@app.post("/api/erp-orders/upload")
+async def erp_upload(
+    file: UploadFile = File(...),
+    period_label: str = Form(...),
+):
+    """Upload an ERP order management Excel and save SKU-level order counts."""
+    content = await file.read()
+    try:
+        rows = erp.parse_erp_excel(content)
+        result = erp.save_erp_upload(file.filename or "upload.xlsx", period_label, rows)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to parse ERP file: {e}")
+
+
+@app.get("/api/erp-orders/uploads")
+def erp_list_uploads():
+    """List all ERP upload records."""
+    return {"uploads": erp.list_uploads()}
+
+
+@app.delete("/api/erp-orders/uploads/{upload_id}")
+def erp_delete_upload(upload_id: int):
+    """Delete an ERP upload and all its SKU data."""
+    return erp.delete_upload(upload_id)
+
+
+@app.get("/api/erp-orders/sku-summary")
+def erp_sku_summary(upload_ids: str = ""):
+    """
+    Return aggregated SKU order counts.
+    upload_ids: comma-separated list of upload IDs (empty = all uploads).
+    """
+    ids = [int(x) for x in upload_ids.split(",") if x.strip().isdigit()] if upload_ids else None
+    return erp.get_sku_summary(ids)

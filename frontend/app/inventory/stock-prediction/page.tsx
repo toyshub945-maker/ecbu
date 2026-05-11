@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useMemo, useCallback } from "react";
+import { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import { useTheme } from "@/components/ThemeProvider";
 
 function backendUrl(path: string) {
@@ -41,6 +41,15 @@ type ParsedData = {
   sku_count: number;
   product_count: number;
   skus: SkuRow[];
+};
+
+type ErpUpload = {
+  id: number;
+  filename: string;
+  period_label: string;
+  row_count: number;
+  sku_count: number;
+  imported_at: string;
 };
 
 // ─── Default months ───────────────────────────────────────────────────────────
@@ -94,11 +103,23 @@ export default function StockPredictionPage() {
   const [months, setMonths] = useState<MonthAllocation[]>(DEFAULT_MONTHS);
   const [showAddMonth, setShowAddMonth] = useState(false);
 
-  // ── Data ─────────────────────────────────────────────────────────────────
+  // ── Data source mode ──────────────────────────────────────────────────────
+  const [dataSource, setDataSource] = useState<"excel" | "erp">("erp");
+
+  // ── Restock Excel data ────────────────────────────────────────────────────
   const [parsedData, setParsedData] = useState<ParsedData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+
+  // ── ERP uploads ───────────────────────────────────────────────────────────
+  const [erpUploads, setErpUploads] = useState<ErpUpload[]>([]);
+  const [selectedUploadIds, setSelectedUploadIds] = useState<Set<number>>(new Set());
+  const [erpLoading, setErpLoading] = useState(false);
+  const [erpUploading, setErpUploading] = useState(false);
+  const [periodLabel, setPeriodLabel] = useState("");
+  const [erpData, setErpData] = useState<ParsedData | null>(null);
+  const [erpFetching, setErpFetching] = useState(false);
 
   // ── UI ────────────────────────────────────────────────────────────────────
   const [searchTerm, setSearchTerm] = useState("");
@@ -107,34 +128,39 @@ export default function StockPredictionPage() {
   const [showTTCols, setShowTTCols] = useState(true);
 
   const fileInput = useRef<HTMLInputElement>(null);
+  const erpFileInput = useRef<HTMLInputElement>(null);
+
+  // ── Active data (whichever source is selected) ───────────────────────────
+  const activeData = dataSource === "erp" ? erpData : parsedData;
 
   // ── Derived data ──────────────────────────────────────────────────────────
-  const grandTotal = parsedData?.grand_total ?? 0;
+  const grandTotal = activeData?.grand_total ?? 0;
 
   const filteredSkus = useMemo(() => {
-    if (!parsedData) return [];
-    let skus = parsedData.skus;
+    if (!activeData) return [];
+    let skus = activeData.skus;
     if (selectedProduct !== "all") {
-      skus = skus.filter(s => s.product_no === selectedProduct);
+      skus = skus.filter(s => (s.product_no || s.sku.split("-")[0]) === selectedProduct);
     }
     if (searchTerm.trim()) {
       const q = searchTerm.toLowerCase();
-      skus = skus.filter(s => s.sku.toLowerCase().includes(q) || s.product_no.toLowerCase().includes(q));
+      skus = skus.filter(s => s.sku.toLowerCase().includes(q) || (s.product_no || "").toLowerCase().includes(q));
     }
     return skus;
-  }, [parsedData, selectedProduct, searchTerm]);
+  }, [activeData, selectedProduct, searchTerm]);
 
   const productNos = useMemo(() => {
-    if (!parsedData) return [];
-    return [...new Set(parsedData.skus.map(s => s.product_no))].sort();
-  }, [parsedData]);
+    if (!activeData) return [];
+    return [...new Set(activeData.skus.map(s => s.product_no || s.sku.split("-")[0]))].sort();
+  }, [activeData]);
 
   // Group for display
   const groupedSkus = useMemo(() => {
     const groups: Record<string, SkuRow[]> = {};
     for (const sku of filteredSkus) {
-      if (!groups[sku.product_no]) groups[sku.product_no] = [];
-      groups[sku.product_no].push(sku);
+      const key = sku.product_no || sku.sku.split("-")[0];
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(sku);
     }
     return groups;
   }, [filteredSkus]);
@@ -178,15 +204,75 @@ export default function StockPredictionPage() {
     }
   }
 
+  // ── ERP handlers ──────────────────────────────────────────────────────────
+
+  async function fetchErpUploads() {
+    setErpLoading(true);
+    try {
+      const res = await fetch(backendUrl("/api/erp-orders/uploads"));
+      const data = await res.json();
+      setErpUploads(data.uploads || []);
+    } finally {
+      setErpLoading(false);
+    }
+  }
+
+  useEffect(() => { fetchErpUploads(); }, []);
+
+  async function handleErpUpload(file: File) {
+    if (!periodLabel.trim()) { setError("Please enter a period label (e.g. 2025 Full Year)"); return; }
+    setErpUploading(true);
+    setError(null);
+    const form = new FormData();
+    form.append("file", file);
+    form.append("period_label", periodLabel.trim());
+    try {
+      const res = await fetch(backendUrl("/api/erp-orders/upload"), { method: "POST", body: form });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail || "Upload failed"); }
+      const newUpload: ErpUpload = await res.json();
+      setErpUploads(prev => [newUpload, ...prev]);
+      setSelectedUploadIds(prev => new Set([...prev, newUpload.id]));
+      setPeriodLabel("");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "ERP upload failed");
+    } finally {
+      setErpUploading(false);
+    }
+  }
+
+  async function handleErpDelete(id: number) {
+    await fetch(backendUrl(`/api/erp-orders/uploads/${id}`), { method: "DELETE" });
+    setErpUploads(prev => prev.filter(u => u.id !== id));
+    setSelectedUploadIds(prev => { const n = new Set(prev); n.delete(id); return n; });
+    if (erpData) setErpData(null);
+  }
+
+  async function loadErpData() {
+    setErpFetching(true);
+    setError(null);
+    try {
+      const ids = [...selectedUploadIds].join(",");
+      const res = await fetch(backendUrl(`/api/erp-orders/sku-summary?upload_ids=${ids}`));
+      if (!res.ok) throw new Error("Failed to load ERP data");
+      const data: ParsedData = await res.json();
+      setErpData(data);
+      setExpandedProducts(new Set(data.skus.map(s => s.product_no || s.sku.split("-")[0])));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setErpFetching(false);
+    }
+  }
+
   async function handleExport() {
-    if (!parsedData) return;
+    if (!activeData) return;
     setExporting(true);
     try {
       const res = await fetch(backendUrl("/api/stock-prediction/export"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          skus: parsedData.skus,
+          skus: activeData.skus,
           months: months.map(m => ({ label: m.label, pct: m.pct })),
           daily_prediction: dailyPrediction,
           prediction_days: predictionDays,
@@ -245,7 +331,7 @@ export default function StockPredictionPage() {
             Upload restock demand Excel → set daily prediction & month % → view predicted stock needs
           </p>
         </div>
-        {parsedData && (
+        {activeData && (
           <button
             onClick={handleExport}
             disabled={exporting}
@@ -269,10 +355,151 @@ export default function StockPredictionPage() {
       <div className="flex flex-col lg:flex-row gap-4">
         {/* ── LEFT: Settings Panel ────────────────────────────────────────── */}
         <div className="lg:w-72 shrink-0 space-y-4">
-          {/* Upload */}
+
+          {/* Data Source Toggle */}
+          <div className={`${t.card} rounded-xl border ${t.divider} p-1 flex gap-1`}>
+            <button
+              onClick={() => setDataSource("erp")}
+              className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${
+                dataSource === "erp" ? "bg-blue-600 text-white shadow" : `${t.t3}`
+              }`}
+            >
+              📦 ERP Orders
+            </button>
+            <button
+              onClick={() => setDataSource("excel")}
+              className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${
+                dataSource === "excel" ? "bg-purple-600 text-white shadow" : `${t.t3}`
+              }`}
+            >
+              📊 Restock Excel
+            </button>
+          </div>
+
+          {/* ── ERP Upload Panel ───────────────────────────────────────────── */}
+          {dataSource === "erp" && (
+            <div className={`${t.card} rounded-xl border ${t.divider} p-4 space-y-3`}>
+              <h3 className={`text-sm font-bold ${t.t1} flex items-center gap-2`}>
+                <span>📦</span> ERP Order Files
+              </h3>
+              <p className={`text-[10px] ${t.t4}`}>
+                Upload TikTok ERP order exports. You can upload multiple files (last year, this year, etc.) and select which ones to include.
+              </p>
+
+              {/* Period label + upload */}
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  placeholder="Period label (e.g. 2025 Full Year)"
+                  value={periodLabel}
+                  onChange={e => setPeriodLabel(e.target.value)}
+                  className={`w-full px-3 py-2 rounded-lg border ${t.divider} ${t.card} ${t.t1} text-xs focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                />
+                <input
+                  type="file"
+                  ref={erpFileInput}
+                  accept=".xlsx,.xls"
+                  className="hidden"
+                  onChange={e => {
+                    const f = e.target.files?.[0];
+                    if (f) handleErpUpload(f);
+                    e.target.value = "";
+                  }}
+                />
+                <button
+                  onClick={() => erpFileInput.current?.click()}
+                  disabled={erpUploading || !periodLabel.trim()}
+                  className={`w-full py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-2 ${
+                    periodLabel.trim() && !erpUploading
+                      ? "bg-blue-600 text-white hover:bg-blue-700"
+                      : `${t.page} ${t.t4} cursor-not-allowed border ${t.divider}`
+                  }`}
+                >
+                  {erpUploading ? (
+                    <><svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Uploading...</>
+                  ) : "Upload ERP File"}
+                </button>
+              </div>
+
+              {/* Upload history */}
+              {erpLoading ? (
+                <div className={`text-xs ${t.t4} text-center py-2`}>Loading...</div>
+              ) : erpUploads.length === 0 ? (
+                <div className={`text-xs ${t.t4} text-center py-2 border ${t.divider} rounded-lg`}>No uploads yet</div>
+              ) : (
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {erpUploads.map(u => (
+                    <div
+                      key={u.id}
+                      onClick={() => setSelectedUploadIds(prev => {
+                        const n = new Set(prev);
+                        if (n.has(u.id)) n.delete(u.id); else n.add(u.id);
+                        return n;
+                      })}
+                      className={`flex items-start gap-2 p-2 rounded-lg border cursor-pointer transition-all ${
+                        selectedUploadIds.has(u.id)
+                          ? "border-blue-400 bg-blue-50"
+                          : `${t.page} border-transparent hover:border-blue-200`
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        readOnly
+                        checked={selectedUploadIds.has(u.id)}
+                        className="mt-0.5 shrink-0"
+                        onClick={e => e.stopPropagation()}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className={`text-xs font-semibold ${selectedUploadIds.has(u.id) ? "text-blue-700" : t.t2} truncate`}>
+                          {u.period_label}
+                        </div>
+                        <div className={`text-[10px] ${t.t4}`}>
+                          {u.sku_count} SKUs · {u.row_count.toLocaleString()} orders
+                        </div>
+                        <div className={`text-[9px] ${t.t5}`}>{u.filename}</div>
+                      </div>
+                      <button
+                        onClick={e => { e.stopPropagation(); handleErpDelete(u.id); }}
+                        className="text-red-400 hover:text-red-600 transition-colors shrink-0 mt-0.5"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Load button */}
+              <button
+                onClick={loadErpData}
+                disabled={selectedUploadIds.size === 0 || erpFetching}
+                className={`w-full py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                  selectedUploadIds.size > 0 && !erpFetching
+                    ? "bg-emerald-600 text-white hover:bg-emerald-700 shadow"
+                    : `${t.page} ${t.t4} cursor-not-allowed border ${t.divider}`
+                }`}
+              >
+                {erpFetching ? (
+                  <><svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Loading...</>
+                ) : `Load Prediction (${selectedUploadIds.size} file${selectedUploadIds.size !== 1 ? "s" : ""})`}
+              </button>
+
+              {erpData && (
+                <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800">
+                  <div className="font-semibold">✓ {erpData.sku_count} SKUs loaded</div>
+                  <div className="text-emerald-700 mt-0.5">{erpData.product_count} products · {erpData.grand_total.toLocaleString()} total orders</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Restock Excel Upload ───────────────────────────────────────── */}
+          {dataSource === "excel" && (
           <div className={`${t.card} rounded-xl border ${t.divider} p-4`}>
             <h3 className={`text-sm font-bold ${t.t1} mb-3 flex items-center gap-2`}>
-              <span>📂</span> Upload Excel
+              <span>📂</span> Upload Restock Excel
             </h3>
             <input
               type="file"
@@ -352,6 +579,7 @@ export default function StockPredictionPage() {
               </div>
             )}
           </div>
+          )}
 
           {/* Prediction Settings */}
           <div className={`${t.card} rounded-xl border ${t.divider} p-4`}>
@@ -467,7 +695,7 @@ export default function StockPredictionPage() {
             </div>
           )}
 
-          {!parsedData && !loading && (
+          {!activeData && !loading && !erpFetching && (
             <div className={`${t.card} rounded-xl border ${t.divider} p-12 flex flex-col items-center gap-4 text-center`}>
               <div className="text-5xl">📊</div>
               <div>
@@ -483,7 +711,7 @@ export default function StockPredictionPage() {
             </div>
           )}
 
-          {parsedData && (
+          {activeData && (
             <>
               {/* Filter bar */}
               <div className={`${t.card} rounded-xl border ${t.divider} p-3 mb-3 flex flex-wrap gap-3 items-center`}>
@@ -499,7 +727,7 @@ export default function StockPredictionPage() {
                   onChange={e => setSelectedProduct(e.target.value)}
                   className={`px-3 py-1.5 rounded-lg border ${t.divider} ${t.card} ${t.t1} text-sm focus:outline-none focus:ring-2 focus:ring-blue-500`}
                 >
-                  <option value="all">All Products ({parsedData.product_count})</option>
+                  <option value="all">All Products ({activeData.product_count})</option>
                   {productNos.map(p => (
                     <option key={p} value={p}>Product {p}</option>
                   ))}
@@ -578,7 +806,8 @@ export default function StockPredictionPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {Object.entries(groupedSkus).map(([prodNo, prodSkus]) => {
+                      {Object.entries(groupedSkus).map(([prodKey, prodSkus]) => {
+                        const prodNo = prodKey;
                         const isExpanded = expandedProducts.has(prodNo);
                         const prodTotalOrders = prodSkus.reduce((s, r) => s + r.total_orders, 0);
                         const prodQuota = grandTotal > 0 ? prodTotalOrders / grandTotal : 0;

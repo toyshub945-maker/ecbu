@@ -349,6 +349,34 @@ CREATE TABLE IF NOT EXISTS creative_data (
 CREATE INDEX IF NOT EXISTS idx_creative_upload  ON creative_data(upload_id);
 CREATE INDEX IF NOT EXISTS idx_creative_store   ON creative_data(store_name);
 CREATE INDEX IF NOT EXISTS idx_creative_product ON creative_data(product_no);
+
+-- ERP Order Uploads (for Stock Prediction) ───────────────────────────────────
+CREATE TABLE IF NOT EXISTS erp_order_uploads (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    filename     TEXT,
+    period_label TEXT NOT NULL,
+    row_count    INTEGER DEFAULT 0,
+    sku_count    INTEGER DEFAULT 0,
+    imported_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS erp_sku_orders (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    upload_id    INTEGER NOT NULL REFERENCES erp_order_uploads(id) ON DELETE CASCADE,
+    sku          TEXT NOT NULL,
+    base_sku     TEXT,
+    product_no   TEXT,
+    tt1_orders   INTEGER DEFAULT 0,
+    tt2_orders   INTEGER DEFAULT 0,
+    tt3_orders   INTEGER DEFAULT 0,
+    tt4_orders   INTEGER DEFAULT 0,
+    other_orders INTEGER DEFAULT 0,
+    total_orders INTEGER DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_erp_sku       ON erp_sku_orders(sku);
+CREATE INDEX IF NOT EXISTS idx_erp_upload_id ON erp_sku_orders(upload_id);
+CREATE INDEX IF NOT EXISTS idx_erp_product   ON erp_sku_orders(product_no);
 """
 
 
@@ -432,6 +460,21 @@ def init_db(db_path: str | None = None) -> None:
             # Ads: orders count + date range end
             "ALTER TABLE ads_campaigns ADD COLUMN orders INTEGER DEFAULT 0",
             "ALTER TABLE ads_campaigns ADD COLUMN date_range_end DATE",
+            # ERP order upload tables
+            """CREATE TABLE IF NOT EXISTS erp_order_uploads (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                filename TEXT, period_label TEXT NOT NULL,
+                row_count INTEGER DEFAULT 0, sku_count INTEGER DEFAULT 0,
+                imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )""",
+            """CREATE TABLE IF NOT EXISTS erp_sku_orders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                upload_id INTEGER NOT NULL REFERENCES erp_order_uploads(id) ON DELETE CASCADE,
+                sku TEXT NOT NULL, base_sku TEXT, product_no TEXT,
+                tt1_orders INTEGER DEFAULT 0, tt2_orders INTEGER DEFAULT 0,
+                tt3_orders INTEGER DEFAULT 0, tt4_orders INTEGER DEFAULT 0,
+                other_orders INTEGER DEFAULT 0, total_orders INTEGER DEFAULT 0
+            )""",
         ]
         for sql in migrations:
             try:
