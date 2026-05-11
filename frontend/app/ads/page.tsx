@@ -727,20 +727,21 @@ type CreativeProduct = {
   videos: CreativeEntry[]; product_cards: CreativeEntry[];
 };
 
-function getCreativeBadge(entry: CreativeEntry): { label: string; cls: string } | null {
-  const isDelivering = entry.status === "Delivering";
+function getCreativeBadge(entry: CreativeEntry): { type: "budget"|"excluded"|"auth"; label: string; cls: string } | null {
+  // Authorization needed — any status (not just Delivering)
   if (entry.status === "Authorization needed") {
-    return { label: "⚠️ Ask creator for ads code", cls: "bg-amber-100 text-amber-700 border-amber-300" };
+    return { type: "auth", label: "🔑 Authorization Needed", cls: "bg-amber-100 text-amber-700 border-amber-300" };
   }
-  if (isDelivering) {
+  // Below rules only apply to Delivering creatives
+  if (entry.status === "Delivering") {
     if (entry.cost_per_order > 0 && entry.cost_per_order < 1 && entry.sku_orders > 1 && entry.roi > 15) {
-      return { label: "💰 Can add extra budget", cls: "bg-green-100 text-green-700 border-green-300" };
+      return { type: "budget", label: "💰 Add Budget", cls: "bg-green-100 text-green-700 border-green-300" };
     }
     if (entry.cost_per_order > 10) {
-      return { label: "🚫 Excluded needed", cls: "bg-red-100 text-red-700 border-red-300" };
+      return { type: "excluded", label: "🚫 Exclude Now", cls: "bg-red-100 text-red-700 border-red-300" };
     }
     if (entry.cost > 10 && entry.sku_orders === 0) {
-      return { label: "🚫 Excluded needed", cls: "bg-red-100 text-red-700 border-red-300" };
+      return { type: "excluded", label: "🚫 Exclude Now", cls: "bg-red-100 text-red-700 border-red-300" };
     }
   }
   return null;
@@ -823,28 +824,27 @@ function AdsCreativeTab() {
     });
   };
 
-  // Aggregate badge counts
+  // Aggregate badge counts using type field
   const badgeSummary = products.reduce((acc, p) => {
     [...p.videos, ...p.product_cards].forEach(e => {
       const b = getCreativeBadge(e);
-      if (b?.label.includes("extra budget")) acc.budget++;
-      if (b?.label.includes("Excluded")) acc.excluded++;
-      if (b?.label.includes("ads code")) acc.auth++;
+      if (b?.type === "budget")   acc.budget++;
+      if (b?.type === "excluded") acc.excluded++;
+      if (b?.type === "auth")     acc.auth++;
     });
     return acc;
   }, { budget: 0, excluded: 0, auth: 0 });
 
-  // Filter products by active action filter
-  const filteredProducts = actionFilter === null ? products : products.filter(product => {
-    const allEntries = [...product.videos, ...product.product_cards];
-    return allEntries.some(e => {
-      const b = getCreativeBadge(e);
-      if (actionFilter === "budget")   return b?.label.includes("extra budget");
-      if (actionFilter === "excluded") return b?.label.includes("Excluded");
-      if (actionFilter === "auth")     return b?.label.includes("ads code");
-      return false;
-    });
-  });
+  // When filter active → flat list of individual matching entries (with product info)
+  type FlatEntry = CreativeEntry & { product_no: string; warehouse_name: string | null; image_url: string | null };
+  const flatFilteredEntries: FlatEntry[] = actionFilter === null ? [] : products.flatMap(p =>
+    [...p.videos, ...p.product_cards]
+      .filter(e => getCreativeBadge(e)?.type === actionFilter)
+      .map(e => ({ ...e, product_no: p.product_no, warehouse_name: p.warehouse_name, image_url: p.image_url }))
+  );
+
+  // Product filter (for grouped view when no filter)
+  const filteredProducts = products;
 
   const totalVideos = products.reduce((a, p) => a + p.videos.length, 0);
   const totalCards  = products.reduce((a, p) => a + p.product_cards.length, 0);
@@ -965,7 +965,7 @@ function AdsCreativeTab() {
             <div className={`text-[10px] ${actionFilter === "excluded" ? "text-red-600" : t.t4}`}>high cost / no orders</div>
           </button>
 
-          {/* Get auth code */}
+          {/* Authorization needed */}
           <button
             onClick={() => setActionFilter(actionFilter === "auth" ? null : "auth")}
             className={`flex flex-col gap-1 px-4 py-3 rounded-xl border text-left transition-all ${
@@ -973,23 +973,106 @@ function AdsCreativeTab() {
                 ? "border-amber-400 bg-amber-50 shadow-sm"
                 : `${t.card} ${t.divider} hover:border-amber-300`
             }`}>
-            <div className={`text-[10px] font-bold uppercase tracking-wider ${actionFilter === "auth" ? "text-amber-700" : t.t4}`}>🔑 Get Auth Code</div>
+            <div className={`text-[10px] font-bold uppercase tracking-wider ${actionFilter === "auth" ? "text-amber-700" : t.t4}`}>🔑 Authorization Needed</div>
             <div className={`text-2xl font-black ${actionFilter === "auth" ? "text-amber-700" : "text-amber-500"}`}>{badgeSummary.auth}</div>
-            <div className={`text-[10px] ${actionFilter === "auth" ? "text-amber-600" : t.t4}`}>contact creator for code</div>
+            <div className={`text-[10px] ${actionFilter === "auth" ? "text-amber-600" : t.t4}`}>contact creator for auth code</div>
           </button>
         </div>
       )}
 
-      {/* ── Product list ── */}
+      {/* ── Flat filtered view (individual creatives) ── */}
+      {actionFilter !== null && (
+        <div className={`${t.card} border ${t.divider} rounded-xl overflow-hidden mb-3`}>
+          <div className={`flex items-center gap-3 px-4 py-3 border-b ${t.divider} ${dark ? "bg-white/5" : "bg-gray-50"}`}>
+            <span className={`text-xs font-bold uppercase tracking-wider ${t.t2}`}>
+              {actionFilter === "budget"   ? "💰 Add Budget" :
+               actionFilter === "excluded" ? "🚫 Needs Exclusion" : "🔑 Authorization Needed"}
+            </span>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+              actionFilter === "budget"   ? "bg-green-100 text-green-700" :
+              actionFilter === "excluded" ? "bg-red-100 text-red-700"     : "bg-amber-100 text-amber-700"
+            }`}>{flatFilteredEntries.length} creatives</span>
+            <button onClick={() => setActionFilter(null)} className={`ml-auto text-xs ${t.t4} hover:${t.t2}`}>← Back to all</button>
+          </div>
+          {flatFilteredEntries.length === 0 ? (
+            <div className={`text-center py-10 text-sm ${t.t4}`}>No creatives match</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className={dark ? "bg-slate-900/60" : "bg-gray-50"}>
+                    <th className={`text-left px-4 py-2.5 font-semibold ${t.t4}`}>Product</th>
+                    <th className={`text-left px-3 py-2.5 font-semibold ${t.t4}`}>Video ID</th>
+                    <th className={`text-left px-3 py-2.5 font-semibold ${t.t4}`}>Creator / Title</th>
+                    <th className={`text-left px-3 py-2.5 font-semibold ${t.t4}`}>Type</th>
+                    <th className={`text-right px-3 py-2.5 font-semibold ${t.t4}`}>Cost</th>
+                    <th className={`text-right px-3 py-2.5 font-semibold ${t.t4}`}>Orders</th>
+                    <th className={`text-right px-3 py-2.5 font-semibold ${t.t4}`}>Cost/Order</th>
+                    <th className={`text-right px-3 py-2.5 font-semibold ${t.t4}`}>Revenue</th>
+                    <th className={`text-right px-3 py-2.5 font-semibold ${t.t4}`}>ROI</th>
+                    <th className={`text-right px-3 py-2.5 font-semibold ${t.t4}`}>CTR</th>
+                    <th className={`text-center px-3 py-2.5 font-semibold ${t.t4}`}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {flatFilteredEntries.map((e, i) => {
+                    const rowBg = i % 2 === 1 ? (dark ? "bg-white/[0.02]" : "bg-gray-50/50") : "";
+                    return (
+                      <tr key={e.id} className={`border-t ${t.divider} ${rowBg}`}>
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            {e.image_url
+                              ? <img src={e.image_url} alt="" className="w-7 h-7 rounded-lg object-cover shrink-0"/>
+                              : <div className={`w-7 h-7 rounded-lg ${t.bar} flex items-center justify-center text-[9px] font-bold ${t.t4} shrink-0`}>#{e.product_no}</div>
+                            }
+                            <span className={`font-bold ${t.t1}`}>#{e.product_no}</span>
+                          </div>
+                        </td>
+                        <td className={`px-3 py-2.5 font-mono text-[10px] ${t.t3}`}>{e.video_id || "–"}</td>
+                        <td className="px-3 py-2.5 max-w-[180px]">
+                          <div className={`font-medium ${t.t1} truncate`} title={e.video_title || ""}>{e.video_title || "–"}</div>
+                          <div className={`text-[10px] ${t.t4} truncate`}>{e.tiktok_account || "–"}</div>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${e.creative_type === "Video" ? "bg-blue-50 text-blue-700" : "bg-violet-50 text-violet-700"}`}>
+                            {e.creative_type === "Video" ? "🎬 Video" : "🃏 Card"}
+                          </span>
+                        </td>
+                        <td className={`px-3 py-2.5 text-right font-mono ${t.t2}`}>${e.cost.toFixed(2)}</td>
+                        <td className={`px-3 py-2.5 text-right font-bold ${e.sku_orders > 0 ? "text-green-600" : t.t4}`}>{e.sku_orders || "–"}</td>
+                        <td className={`px-3 py-2.5 text-right font-mono ${e.cost_per_order > 10 ? "text-red-600 font-bold" : e.cost_per_order > 0 && e.cost_per_order < 1 && e.sku_orders > 0 ? "text-green-600 font-bold" : t.t2}`}>
+                          {e.cost_per_order > 0 ? `$${e.cost_per_order.toFixed(2)}` : "–"}
+                        </td>
+                        <td className={`px-3 py-2.5 text-right font-mono ${t.t2}`}>${e.gross_revenue.toFixed(2)}</td>
+                        <td className={`px-3 py-2.5 text-right font-semibold ${e.roi >= 15 ? "text-green-600" : e.roi > 0 ? "text-amber-600" : t.t4}`}>
+                          {e.roi > 0 ? e.roi.toFixed(1) : "–"}
+                        </td>
+                        <td className={`px-3 py-2.5 text-right ${t.t3}`}>{pct(e.click_rate)}</td>
+                        <td className="px-3 py-2.5 text-center">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${statusCls(e.status)}`}>
+                            {e.status || "–"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Product list (grouped, shown only when no filter active) ── */}
       {loading ? (
         <div className="flex items-center justify-center py-20 gap-3">
           <div className="w-6 h-6 border-2 border-violet-200 border-t-violet-600 rounded-full animate-spin" />
           <span className={`${t.t4} text-sm`}>Loading creatives…</span>
         </div>
-      ) : (
+      ) : actionFilter === null ? (
         <div className="space-y-3">
-          {filteredProducts.length === 0 && products.length > 0 && (
-            <div className={`text-center py-12 ${t.t4} text-sm`}>No products match this filter</div>
+          {filteredProducts.length === 0 && (
+            <div className={`text-center py-12 ${t.t4} text-sm`}>No products found</div>
           )}
           {filteredProducts.map(product => {
             const isExpanded = expandedProducts.has(product.product_no);
@@ -1001,13 +1084,13 @@ function AdsCreativeTab() {
             const totalRev     = allEntries.reduce((s, e) => s + e.gross_revenue, 0);
             const avgROI       = allEntries.filter(e => e.roi > 0).reduce((s, e, _, a) => s + e.roi / a.length, 0);
 
-            const hasBudget   = allEntries.some(e => getCreativeBadge(e)?.label.includes("extra budget"));
-            const hasExcluded = allEntries.some(e => getCreativeBadge(e)?.label.includes("Excluded"));
-            const hasAuth     = allEntries.some(e => getCreativeBadge(e)?.label.includes("ads code"));
+            const hasBudget   = allEntries.some(e => getCreativeBadge(e)?.type === "budget");
+            const hasExcluded = allEntries.some(e => getCreativeBadge(e)?.type === "excluded");
+            const hasAuth     = allEntries.some(e => getCreativeBadge(e)?.type === "auth");
 
-            const budgetCount   = allEntries.filter(e => getCreativeBadge(e)?.label.includes("extra budget")).length;
-            const excludedCount = allEntries.filter(e => getCreativeBadge(e)?.label.includes("Excluded")).length;
-            const authCount     = allEntries.filter(e => getCreativeBadge(e)?.label.includes("ads code")).length;
+            const budgetCount   = allEntries.filter(e => getCreativeBadge(e)?.type === "budget").length;
+            const excludedCount = allEntries.filter(e => getCreativeBadge(e)?.type === "excluded").length;
+            const authCount     = allEntries.filter(e => getCreativeBadge(e)?.type === "auth").length;
 
             return (
               <div key={product.product_no} className={`${t.card} border ${t.divider} rounded-xl overflow-hidden shadow-sm`}>
@@ -1124,9 +1207,9 @@ function AdsCreativeTab() {
                                     <td className="px-3 py-2.5 text-center">
                                       {badge ? (
                                         <span className={`px-2 py-1 rounded-lg text-[10px] font-bold border ${badge.cls}`}>
-                                          {badge.label.includes("extra budget") ? "💰 Add Budget" :
-                                           badge.label.includes("Excluded")     ? "🚫 Exclude Now" :
-                                           "🔑 Get Auth Code"}
+                                          {badge.type === "budget"   ? "💰 Add Budget" :
+                                           badge.type === "excluded"  ? "🚫 Exclude Now" :
+                                           "🔑 Authorization Needed"}
                                         </span>
                                       ) : <span className={`text-[10px] ${t.t5}`}>—</span>}
                                     </td>
@@ -1185,9 +1268,9 @@ function AdsCreativeTab() {
                                     <td className="px-3 py-2.5 text-center">
                                       {badge ? (
                                         <span className={`px-2 py-1 rounded-lg text-[10px] font-bold border ${badge.cls}`}>
-                                          {badge.label.includes("extra budget") ? "💰 Add Budget" :
-                                           badge.label.includes("Excluded")     ? "🚫 Exclude Now" :
-                                           "🔑 Get Auth Code"}
+                                          {badge.type === "budget"   ? "💰 Add Budget" :
+                                           badge.type === "excluded"  ? "🚫 Exclude Now" :
+                                           "🔑 Authorization Needed"}
                                         </span>
                                       ) : <span className={`text-[10px] ${t.t5}`}>—</span>}
                                     </td>
@@ -1205,7 +1288,7 @@ function AdsCreativeTab() {
             );
           })}
         </div>
-      )}
+      ) : null}
 
       {/* ── Upload modal ── */}
       {showUploadModal && (
