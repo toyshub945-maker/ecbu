@@ -132,7 +132,7 @@ export default function AdsPage() {
       const params = new URLSearchParams();
       if (activeTab !== "All") params.append("store", activeTab);
       if (searchTerm) params.append("search", searchTerm);
-      const res = await fetch(`/api/ads?${params}`);
+      const res = await fetch(backendUrl(`/api/ads?${params}`));
       const data = await res.json();
       setAds(data.ads || []);
     } catch (e) {
@@ -189,7 +189,7 @@ export default function AdsPage() {
   const handleDelete = async (id: number) => {
     if (!confirm("Delete this record?")) return;
     try {
-      await fetch(`/api/ads/${id}`, { method: "DELETE" });
+      await fetch(backendUrl(`/api/ads/${id}`), { method: "DELETE" });
       fetchAds();
       fetchSummary();
     } catch (e) {
@@ -212,7 +212,7 @@ export default function AdsPage() {
       value = parseFloat(editValue) || 0;
     }
     try {
-      await fetch(`/api/ads/${id}`, {
+      await fetch(backendUrl(`/api/ads/${id}`), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ [field]: value }),
@@ -283,7 +283,7 @@ export default function AdsPage() {
     try {
       const params = new URLSearchParams();
       if (activeTab !== "All") params.append("store", activeTab);
-      const res = await fetch(`/api/ads/export?${params}`);
+      const res = await fetch(backendUrl(`/api/ads/export?${params}`));
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -315,7 +315,7 @@ export default function AdsPage() {
     if (!confirm(`Delete ${selectedIds.size} records?`)) return;
     try {
       for (const id of selectedIds) {
-        await fetch(`/api/ads/${id}`, { method: "DELETE" });
+        await fetch(backendUrl(`/api/ads/${id}`), { method: "DELETE" });
       }
       setSelectedIds(new Set());
       fetchAds();
@@ -330,7 +330,7 @@ export default function AdsPage() {
     if (selectedIds.size === 0 || !bulkEditValue) return;
     try {
       for (const id of selectedIds) {
-        await fetch(`/api/ads/${id}`, {
+        await fetch(backendUrl(`/api/ads/${id}`), {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ [bulkEditField]: bulkEditValue }),
