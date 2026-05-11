@@ -13,7 +13,9 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [key, setKey] = useState<ThemeKey>(() => {
     if (typeof window !== "undefined") {
-      return (localStorage.getItem("dashTheme") as ThemeKey) || "classic";
+      // __DASH_THEME__ is pre-seeded by the blocking script in layout.tsx
+      // This avoids reading localStorage twice and ensures the same value
+      return ((window as any).__DASH_THEME__ as ThemeKey) || "classic";
     }
     return "classic";
   });
