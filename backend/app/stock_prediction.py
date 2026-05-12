@@ -25,7 +25,7 @@ def parse_restock_excel(file_content: bytes) -> dict:
       - grand_total: int   (sum of all SKU orders across ALL sheets)
       - skus: list[dict]   (one entry per SKU row, with product_no derived from sheet name)
     """
-    wb = openpyxl.load_workbook(io.BytesIO(file_content), data_only=True)
+    wb = openpyxl.load_workbook(io.BytesIO(file_content), data_only=True, read_only=True)
     all_skus: list[dict] = []
 
     for sheet_name in wb.sheetnames:
