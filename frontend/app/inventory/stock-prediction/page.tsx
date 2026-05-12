@@ -111,31 +111,62 @@ function GenerateTemplatePanel({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   t: any;
 }) {
-  const [productNo, setProductNo] = useState("");
+  const [productNos, setProductNos] = useState("");
   const [useAllUploads, setUseAllUploads] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
-  const [genSuccess, setGenSuccess] = useState(false);
+  const [genSuccess, setGenSuccess] = useState<string | null>(null);
+
+  // Parse product numbers from the textarea (newlines or commas)
+  const parsedProducts = productNos
+    .split(/[\n,]+/)
+    .map(s => s.trim())
+    .filter(Boolean);
+  const isBatch = parsedProducts.length > 1;
 
   async function handleGenerate() {
-    if (!productNo.trim()) { setGenError("Please enter a product number"); return; }
+    if (parsedProducts.length === 0) { setGenError("Please enter at least one product number"); return; }
     setGenerating(true);
     setGenError(null);
-    setGenSuccess(false);
+    setGenSuccess(null);
     try {
       const upload_ids = useAllUploads ? [] : [...selectedIds];
-      const res = await fetch(backendUrl("/api/stock-prediction/generate-template"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          product_no: productNo.trim(),
-          daily_prediction: dailyPrediction,
-          prediction_days: predictionDays,
-          months: months.map(m => ({ label: m.label, pct: m.pct })),
-          upload_ids,
-        }),
-      });
+      const monthsPayload = months.map(m => ({ label: m.label, pct: m.pct }));
+
+      let res: Response;
+      let filename: string;
+
+      if (isBatch) {
+        // Multi-product → single Excel with one tab per product
+        res = await fetch(backendUrl("/api/stock-prediction/batch-generate-template"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            product_nos: parsedProducts,
+            daily_prediction: dailyPrediction,
+            prediction_days: predictionDays,
+            months: monthsPayload,
+            upload_ids,
+          }),
+        });
+        filename = `prediction_batch_${parsedProducts.length}products.xlsx`;
+      } else {
+        // Single product
+        res = await fetch(backendUrl("/api/stock-prediction/generate-template"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            product_no: parsedProducts[0],
+            daily_prediction: dailyPrediction,
+            prediction_days: predictionDays,
+            months: monthsPayload,
+            upload_ids,
+          }),
+        });
+        filename = `prediction_${parsedProducts[0]}.xlsx`;
+      }
+
       if (!res.ok) {
         const e = await res.json();
         throw new Error(e.detail || "Generation failed");
@@ -144,11 +175,16 @@ function GenerateTemplatePanel({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `prediction_${productNo.trim()}.xlsx`;
+      a.download = filename;
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      setGenSuccess(true);
-      setTimeout(() => setGenSuccess(false), 3000);
+      setGenSuccess(isBatch
+        ? `✅ ${parsedProducts.length} products exported as separate tabs!`
+        : `✅ Template downloaded!`
+      );
+      setTimeout(() => setGenSuccess(null), 4000);
     } catch (e: unknown) {
       setGenError(e instanceof Error ? e.message : "Generation failed");
     } finally {
@@ -162,18 +198,27 @@ function GenerateTemplatePanel({
         <span>📋</span> Generate Template
       </h3>
       <p className={`text-[10px] ${t.t4}`}>
-        Enter a product number to generate a filled prediction template Excel (matches the exact template format).
+        Enter one or more product numbers — one per line or comma-separated.
+        Multiple products export as separate tabs in one Excel file.
       </p>
 
       <div>
-        <label className={`text-xs font-medium ${t.t3} block mb-1`}>Product Number</label>
-        <input
-          type="text"
-          placeholder="e.g. 217"
-          value={productNo}
-          onChange={e => setProductNo(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter") handleGenerate(); }}
-          className={`w-full px-3 py-2 rounded-lg border ${t.divider} ${t.card} ${t.t1} text-sm focus:outline-none focus:ring-2 focus:ring-amber-500`}
+        <div className="flex items-center justify-between mb-1">
+          <label className={`text-xs font-medium ${t.t3}`}>Product Numbers</label>
+          {parsedProducts.length > 0 && (
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+              isBatch ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"
+            }`}>
+              {isBatch ? `${parsedProducts.length} products → batch` : "1 product"}
+            </span>
+          )}
+        </div>
+        <textarea
+          rows={4}
+          placeholder={"372\n340\n342\n426"}
+          value={productNos}
+          onChange={e => setProductNos(e.target.value)}
+          className={`w-full px-3 py-2 rounded-lg border ${t.divider} ${t.card} ${t.t1} text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none font-mono`}
         />
       </div>
 
@@ -221,15 +266,15 @@ function GenerateTemplatePanel({
       )}
       {genSuccess && (
         <div className="p-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-xs font-medium">
-          ✅ Template downloaded!
+          {genSuccess}
         </div>
       )}
 
       <button
         onClick={handleGenerate}
-        disabled={generating || !productNo.trim()}
+        disabled={generating || parsedProducts.length === 0}
         className={`w-full py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-          productNo.trim() && !generating
+          parsedProducts.length > 0 && !generating
             ? "bg-amber-500 hover:bg-amber-600 text-white shadow-md"
             : `${t.page} ${t.t4} cursor-not-allowed border ${t.divider}`
         }`}
@@ -240,21 +285,21 @@ function GenerateTemplatePanel({
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
             </svg>
-            Generating…
+            {isBatch ? `Generating ${parsedProducts.length} sheets…` : "Generating…"}
           </>
         ) : (
           <>
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
             </svg>
-            Generate & Download
+            {isBatch ? `Export ${parsedProducts.length} Products (Multi-Tab)` : "Generate & Download"}
           </>
         )}
       </button>
 
       <div className={`text-[9px] ${t.t5} leading-relaxed`}>
-        Uses current daily prediction ({dailyPrediction}/day), {predictionDays} days,
-        and {months.length} month allocations. Data pulled from ERP orders DB + Warehouse + Products.
+        Uses {dailyPrediction} orders/day × {predictionDays} days with {months.length} month allocations.
+        Data from ERP orders DB + Warehouse + Products.
       </div>
     </div>
   );

@@ -398,32 +398,22 @@ def export_prediction_excel(skus: list[dict], months: list[dict], daily_predicti
     return buf.read()
 
 
-def generate_template_excel(
+def _fill_product_sheet(
+    ws,
     product_no: str,
     skus: list[dict],
     months: list[dict],
     daily_prediction: float,
     prediction_days: int,
     grand_total: int,
-) -> bytes:
+) -> None:
     """
-    Fill the exact "Template prediction.xlsx" layout for a single product.
-
-    Template structure:
-      Sheet name : "Restock Demand template {product_no}"
-      Row 1      : instruction text (bold, wrapped)
-      Row 2      : headers, yellow fill FFFFF3CE, bold
-                   A=Image | B=SKU | C=TT1-Orders | D=TT2-Orders | E=TT3-Orders | F=TT4-Orders
-                   G=Total Orders | H=SKU Quota Rate | I=Now Stock | J=Expected Demand
-                   K..K+n-1 = month columns  |  last-3=Selling price | last-2=Profit margin | last-1=Return and refund rate
-      Row 3+     : data rows, height 16.5
+    Write one product's data into an existing openpyxl Worksheet (ws).
+    Sheet name must be set by the caller before calling this function.
     """
     import openpyxl as xl
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-
-    wb = xl.Workbook()
-    ws = wb.active
-    ws.title = f"Restock Demand template {product_no}"
+    from openpyxl.utils import get_column_letter
 
     # ── Styles ────────────────────────────────────────────────────────────────
     YELLOW_FILL = PatternFill("solid", fgColor="FFFFF3CE")
@@ -451,8 +441,6 @@ def generate_template_excel(
         "I": 10.0,     # Now Stock
         "J": 19.5,     # Expected Demand
     }
-    # Month cols and tail cols
-    from openpyxl.utils import get_column_letter
     for i in range(month_count):
         col_letter = get_column_letter(11 + i)
         COL_WIDTHS[col_letter] = 10.0
@@ -564,6 +552,57 @@ def generate_template_excel(
 
     # ── Freeze below header row ────────────────────────────────────────────────
     ws.freeze_panes = "A3"
+
+
+def generate_template_excel(
+    product_no: str,
+    skus: list[dict],
+    months: list[dict],
+    daily_prediction: float,
+    prediction_days: int,
+    grand_total: int,
+) -> bytes:
+    """Generate a single-product prediction template Excel (one sheet)."""
+    import openpyxl as xl
+    wb = xl.Workbook()
+    ws = wb.active
+    ws.title = f"Restock Demand template {product_no}"
+    _fill_product_sheet(ws, product_no, skus, months, daily_prediction, prediction_days, grand_total)
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf.read()
+
+
+def batch_generate_template_excel(
+    products: list[dict],
+    months: list[dict],
+    daily_prediction: float,
+    prediction_days: int,
+    grand_total: int,
+) -> bytes:
+    """
+    Generate a multi-sheet prediction template Excel.
+    products: [{"product_no": str, "skus": list[dict]}, ...]
+    Each product gets its own sheet tab named "Restock Demand template {product_no}".
+    """
+    import openpyxl as xl
+    wb = xl.Workbook()
+    wb.remove(wb.active)  # remove the default empty sheet
+
+    for p in products:
+        product_no = p["product_no"]
+        skus = p["skus"]
+        if not skus:
+            continue
+        # Sheet names max 31 chars in Excel
+        sheet_title = f"Restock Demand template {product_no}"[:31]
+        ws = wb.create_sheet(title=sheet_title)
+        _fill_product_sheet(ws, product_no, skus, months, daily_prediction, prediction_days, grand_total)
+
+    if not wb.sheetnames:
+        # Fallback: at least one empty sheet so the file is valid
+        wb.create_sheet("No Data")
 
     buf = io.BytesIO()
     wb.save(buf)
