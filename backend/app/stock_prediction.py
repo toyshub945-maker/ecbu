@@ -174,13 +174,14 @@ def _enrich_from_db(skus: list[dict]) -> None:
     try:
         with db.db_cursor() as cur:
             # ── 1. Warehouse stock by SKU ─────────────────────────────────────
+            # Use the indexed `sku` column directly; normalise to lower in Python
             cur.execute("""
-                SELECT lower(sku) as sku_lower, SUM(stock_quantity) as total_qty
+                SELECT sku, SUM(stock_quantity) as total_qty
                 FROM warehouse_inventory
-                GROUP BY lower(sku)
+                GROUP BY sku
             """)
             wh_stock: dict[str, int] = {
-                row["sku_lower"]: int(row["total_qty"] or 0)
+                row["sku"].lower(): int(row["total_qty"] or 0)
                 for row in cur.fetchall()
             }
 
@@ -205,17 +206,26 @@ def _enrich_from_db(skus: list[dict]) -> None:
                         product_margins[str(row["product_no"])] = margin
 
             # ── 3. R&R rate by msku (case-insensitive) ────────────────────────
-            #   rr_order_items.msku format: "STP039-Black MB-6"
-            #   We match using MSKU from ERP data (stored in erp_sku_orders.msku),
-            #   falling back to the plain sku field if no msku is available.
+            # Pre-aggregate each table separately BEFORE joining — the old single
+            # JOIN multiplied every order row × every return row per MSKU before
+            # grouping (cartesian explosion). CTEs pre-aggregate first, then join
+            # on already-small sets.
             cur.execute("""
-                SELECT lower(o.msku) as msku_lower,
-                       SUM(o.order_qty)  as total_orders,
-                       COALESCE(SUM(r.return_qty), 0) as total_returns
-                FROM rr_order_items o
-                LEFT JOIN rr_return_items r
-                    ON lower(r.msku) = lower(o.msku)
-                GROUP BY lower(o.msku)
+                WITH o_agg AS (
+                    SELECT lower(msku) AS m, SUM(order_qty) AS total_orders
+                    FROM rr_order_items
+                    GROUP BY lower(msku)
+                ),
+                r_agg AS (
+                    SELECT lower(msku) AS m, SUM(return_qty) AS total_returns
+                    FROM rr_return_items
+                    GROUP BY lower(msku)
+                )
+                SELECT o.m AS msku_lower,
+                       o.total_orders,
+                       COALESCE(r.total_returns, 0) AS total_returns
+                FROM o_agg o
+                LEFT JOIN r_agg r ON o.m = r.m
             """)
             rr_map: dict[str, float] = {}
             for row in cur.fetchall():
