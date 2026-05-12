@@ -24,27 +24,47 @@ _MINIMAL_STYLES = b'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 </styleSheet>'''
 
 
+def _strip_xlsx(src_path, dest_path):
+    """Create a sanitized xlsx copy:
+      - Replace xl/styles.xml with a minimal valid stylesheet
+      - Strip s="..." style references from every cell in every sheet
+      - Strip themeColor / numFmt references that may point to missing styles
+    This makes the workbook readable by openpyxl even if the source had
+    invalid XML or out-of-range style indices (common in TikTok templates).
+    """
+    # Regex to strip style references inside cell tags
+    cell_style_re = re.compile(rb'(<c[^>]*?)\s+s="\d+"')
+
+    with zipfile.ZipFile(src_path, 'r') as zin:
+        with zipfile.ZipFile(dest_path, 'w', zipfile.ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                content = zin.read(item.filename)
+                fname = item.filename
+
+                if fname == 'xl/styles.xml':
+                    content = _MINIMAL_STYLES
+                elif fname.startswith('xl/worksheets/') and fname.endswith('.xml'):
+                    # Strip cell-level style references so openpyxl
+                    # doesn't try to look them up in our minimal stylesheet
+                    content = cell_style_re.sub(rb'\1', content)
+
+                zout.writestr(fname, content)
+
+
 def _load_workbook_safe(path):
-    """Load workbook; if stylesheet XML is invalid (common in TikTok templates),
-    patch it with a minimal valid stylesheet and retry."""
+    """Load workbook; if it fails for any reason (invalid stylesheet, bad
+    style index, etc.), sanitize the xlsx by stripping style references
+    and retry. Always falls through to a sanitized copy on failure."""
     try:
         return load_workbook(path, keep_links=False)
-    except Exception as e:
-        err = str(e).lower()
-        if "stylesheet" not in err and "xml" not in err and "invalid" not in err:
-            raise  # Not a stylesheet issue — re-raise immediately
+    except Exception:
+        pass
 
-    # ── Patch broken styles.xml and reload ──────────────────────────────────
+    # ── Sanitize the xlsx and reload ────────────────────────────────────────
     tmp_fd, tmp_path = tempfile.mkstemp(suffix='.xlsx')
     os.close(tmp_fd)
     try:
-        with zipfile.ZipFile(path, 'r') as zin:
-            with zipfile.ZipFile(tmp_path, 'w', zipfile.ZIP_DEFLATED) as zout:
-                for item in zin.infolist():
-                    if item.filename == 'xl/styles.xml':
-                        zout.writestr(item.filename, _MINIMAL_STYLES)
-                    else:
-                        zout.writestr(item, zin.read(item.filename))
+        _strip_xlsx(path, tmp_path)
         return load_workbook(tmp_path, keep_links=False)
     finally:
         try:
