@@ -484,7 +484,7 @@ def generate_template_excel(
     month_header_labels = [m["label"] for m in months]
     header_values = (
         ["Image", "SKU", "TT1-Orders", "TT2-Orders", "TT3-Orders", "TT4-Orders",
-         "Total Orders", "SKU Quota Rate", "Now Stock", "Expected Demand"]
+         "Total Orders", "SKU Quota Rate", "Now Stock", "Expected 3-Mo Demand"]
         + month_header_labels
         + ["Selling price", "Profit margin", "Return and refund rate"]
     )
@@ -510,10 +510,20 @@ def generate_template_excel(
 
     sorted_skus = sorted(skus, key=_sku_size_key)
 
+    # ── Use product-level total for quota (not global grand_total) ────────────
+    # grand_total is the cross-product total used in the header for context only.
+    # For per-SKU quota rate and expected demand we want within-product share,
+    # so that daily_prediction (orders/day for THIS product) is distributed correctly.
+    product_total = sum(s["total_orders"] for s in sorted_skus)
+
     # ── Rows 3+: data ──────────────────────────────────────────────────────────
     for s in sorted_skus:
-        quota = s["total_orders"] / grand_total if grand_total > 0 else 0
+        quota = s["total_orders"] / product_total if product_total > 0 else 0
         expected = daily_prediction * prediction_days * quota
+
+        sp = s.get("selling_price")
+        pm = s.get("profit_margin")   # stored as 0–1 decimal
+        rr = s.get("rr_rate")         # stored as 0–1 decimal
 
         row_data = [
             "",                                    # A: Image (empty)
@@ -523,20 +533,17 @@ def generate_template_excel(
             s.get("tt3_orders", 0),               # E
             s.get("tt4_orders", 0),               # F
             s["total_orders"],                    # G
-            round(quota, 8),                      # H: SKU Quota Rate (as decimal)
+            quota,                                # H: SKU Quota Rate (decimal → % format)
             s.get("current_stock", 0),            # I
             round(expected, 1),                   # J
         ]
         for m in months:
             row_data.append(round(expected * m["pct"] / 100, 1))
 
-        sp = s.get("selling_price")
-        pm = s.get("profit_margin")
-        rr = s.get("rr_rate")
         row_data += [
             round(sp, 2) if sp else "",
-            round(pm * 100, 2) if pm else "",
-            round(rr * 100, 2) if rr else "",
+            pm if pm else "",           # stored as decimal → % format applied below
+            rr if rr else "",           # stored as decimal → % format applied below
         ]
 
         row_num = ws.max_row + 1
@@ -549,8 +556,11 @@ def generate_template_excel(
             cell.alignment = Alignment(horizontal="center", vertical="center")
         # SKU left-aligned
         ws.cell(row=row_num, column=2).alignment = Alignment(horizontal="left", vertical="center")
-        # SKU Quota Rate (col H = 8) formatted as percentage
-        ws.cell(row=row_num, column=8).number_format = "0.00%"
+        # Percentage-formatted columns
+        tail_start = 11 + len(months)
+        ws.cell(row=row_num, column=8).number_format           = "0.00%"   # SKU Quota Rate
+        ws.cell(row=row_num, column=tail_start + 1).number_format = "0.00%"   # Profit margin
+        ws.cell(row=row_num, column=tail_start + 2).number_format = "0.00%"   # R&R rate
 
     # ── Freeze below header row ────────────────────────────────────────────────
     ws.freeze_panes = "A3"
