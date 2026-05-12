@@ -21,6 +21,22 @@ def get_store_name_from_sheet(sheet_name: str) -> str:
     return REVERSE_STORE_MAPPING.get(sheet_name, sheet_name)
 
 
+# Statuses we import from TikTok Ads Manager exports
+ALLOWED_STATUSES = {"Active", "Not delivering"}
+
+# Normalise TikTok status strings → our stored values
+def _normalise_status(raw: str) -> str | None:
+    """Return canonical status string or None to skip the row."""
+    s = raw.strip()
+    if s.lower() == "active":
+        return "Active"
+    # "Not delivering" covers budget-spent, limited, etc.
+    if "not delivering" in s.lower() or "not_delivering" in s.lower():
+        return "Not delivering"
+    # Skip Paused / Deleted / Completed / other
+    return None
+
+
 def parse_ads_excel(file_content: bytes, store_name: str, date: str, date_range_end: str | None = None) -> list[dict]:
     df = pd.read_excel(io.BytesIO(file_content))
     records = []
@@ -31,20 +47,26 @@ def parse_ads_excel(file_content: bytes, store_name: str, date: str, date_range_
         if not campaign_name or campaign_name == "nan":
             continue
 
+        # ── Read status from TikTok export; skip rows that aren't Active/Not delivering ──
+        raw_status = str(row.get("Status", row.get("status", "Active")) or "Active")
+        status = _normalise_status(raw_status)
+        if status is None:
+            continue   # skip Paused, Deleted, Completed, etc.
+
+        # ── Extract product number from campaign name ─────────────────────────
         product_number = ""
         if "Product" in campaign_name:
             parts = campaign_name.split("Product")
             if len(parts) > 1:
                 product_number = parts[1].strip()
-
         product_number = product_number or campaign_name
 
-        cost = row.get("Cost", 0) or 0
-        gross_revenue = row.get("Gross revenue", row.get("Gross Revenue", 0)) or 0
-        roi = row.get("ROI", 0) or 0
-        cost_per_order = row.get("Cost per order", row.get("Cost Per Order", 0)) or 0
-        orders = row.get("SKU orders", row.get("Orders", 0)) or 0
-        current_budget = row.get("Current budget", row.get("Budget", 0)) or 0
+        cost          = float(row.get("Cost", 0) or 0)
+        gross_revenue = float(row.get("Gross revenue", row.get("Gross Revenue", 0)) or 0)
+        roi           = float(row.get("ROI", 0) or 0)
+        cost_per_order = float(row.get("Cost per order", row.get("Cost Per Order", 0)) or 0)
+        orders        = float(row.get("SKU orders", row.get("Orders", 0)) or 0)
+        current_budget = float(row.get("Current budget", row.get("Budget", 0)) or 0)
 
         if gross_revenue > 0:
             ad_cost_rate = (cost / gross_revenue) * 100
@@ -55,25 +77,25 @@ def parse_ads_excel(file_content: bytes, store_name: str, date: str, date_range_
             cost_per_order = cost / orders
 
         records.append({
-            "store_name": store_name,
-            "product_number": str(product_number),
-            "date": date,
-            "date_range_end": date_range_end,
-            "status": "Active",
-            "orders": int(orders) if orders else 0,
-            "roi": float(roi) if roi else 0,
-            "cost_per_order": float(cost_per_order) if cost_per_order else 0,
-            "ad_cost_rate": float(round(ad_cost_rate, 2)),
-            "ad_spend": float(cost) if cost else 0,
-            "revenue": float(gross_revenue) if gross_revenue else 0,
-            "campaign_budget": float(current_budget) if current_budget else 0,
+            "store_name":      store_name,
+            "product_number":  str(product_number),
+            "date":            date,
+            "date_range_end":  date_range_end,
+            "status":          status,          # ← real status from file
+            "orders":          int(orders),
+            "roi":             roi,
+            "cost_per_order":  cost_per_order,
+            "ad_cost_rate":    round(ad_cost_rate, 2),
+            "ad_spend":        cost,
+            "revenue":         gross_revenue,
+            "campaign_budget": current_budget,
             "budget_adjustment": "",
-            "extra_budget_id": "",
-            "ads_open_date": None,
-            "total_funds": None,
-            "profit": None,
-            "color_flag": None,
-            "notes": "",
+            "extra_budget_id":   "",
+            "ads_open_date":  None,
+            "total_funds":    None,
+            "profit":         None,
+            "color_flag":     None,
+            "notes":          "",
         })
 
     return records

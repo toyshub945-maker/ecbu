@@ -476,6 +476,7 @@ export default function AdsPage() {
             onBlur={() => setFocusedCell(null)}
           >
             <option value="Active">Active</option>
+            <option value="Not delivering">Not delivering</option>
             <option value="Paused">Paused</option>
           </select>
         );
@@ -507,7 +508,11 @@ export default function AdsPage() {
     }
 
     if (field === "status") {
-      return <span className={`px-2 py-0.5 rounded text-xs font-medium ${value === "Active" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>{value}</span>;
+      const statusCls =
+        value === "Active"         ? "bg-green-100 text-green-700" :
+        value === "Not delivering" ? "bg-amber-100 text-amber-700" :
+                                     "bg-red-100 text-red-700";
+      return <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusCls}`}>{value as string}</span>;
     }
     if (field === "ad_cost_rate") {
       const rate = value as number;
@@ -640,10 +645,11 @@ export default function AdsPage() {
 
         {showFilters && (
           <div className={`mb-3 p-3 ${t.card} rounded-lg border ${t.divider} flex flex-wrap gap-3 items-center`}>
-            <select value={filters.status} onChange={e => setFilters({ ...filters, status: e.target.value })} className={`px-3 py-2 border ${selectCls} min-w-[120px]`}>
+            <select value={filters.status} onChange={e => setFilters({ ...filters, status: e.target.value })} className={`px-3 py-2 border ${selectCls} min-w-[140px]`}>
               <option value="">All Status</option>
-              <option value="Active">Active</option>
-              <option value="Paused">Paused</option>
+              <option value="Active">🟢 Active</option>
+              <option value="Not delivering">🟡 Not delivering</option>
+              <option value="Paused">⏸ Paused</option>
             </select>
             <div className="flex items-center gap-2">
               <span className={`text-sm ${t.t3}`}>ROI:</span>
@@ -775,7 +781,7 @@ export default function AdsPage() {
                       <tr><td colSpan={11} className={`text-center py-12 ${t.t4}`}>No records — upload data for Live</td></tr>
                     ) : displayedAds.map(record => {
                       const rateStyle = getAdCostRateCellStyle(record.ad_cost_rate);
-                      const statusCls = record.status === "Active" ? "bg-green-100 text-green-800" : record.status === "Paused" ? "bg-yellow-100 text-yellow-800" : "bg-gray-100 text-gray-700";
+                      const statusCls = record.status === "Active" ? "bg-green-100 text-green-800" : record.status === "Not delivering" ? "bg-amber-100 text-amber-800" : record.status === "Paused" ? "bg-yellow-100 text-yellow-800" : "bg-gray-100 text-gray-700";
                       return (
                         <tr key={record.id} className={hoverRow}>
                           <td className={`border ${tbodyBorder} px-2 py-2 text-center`}><input type="checkbox" checked={selectedIds.has(record.id)} onChange={() => toggleSelect(record.id)} className="w-4 h-4" /></td>
