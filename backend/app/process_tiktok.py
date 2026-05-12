@@ -4,8 +4,13 @@ from openpyxl import load_workbook
 import os
 import sys
 import re
-import win32com.client
-import pythoncom
+import platform as _platform
+if _platform.system() == "Windows":
+    import win32com.client
+    import pythoncom
+else:
+    win32com = None
+    pythoncom = None
 
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -219,6 +224,8 @@ def run_automation(msku_mapping_path, inventory_path, template_path, output_path
     
     logs.append("[Step 3] Updating TikTok Template")
     
+    if pythoncom is None or win32com is None:
+        raise RuntimeError("TikTok Excel automation requires Windows with Microsoft Excel installed.")
     pythoncom.CoInitialize()
     try:
         excel = win32com.client.Dispatch("Excel.Application")
