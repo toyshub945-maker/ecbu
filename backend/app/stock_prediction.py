@@ -577,14 +577,14 @@ def generate_template_excel(
 def batch_generate_template_excel(
     products: list[dict],
     months: list[dict],
-    daily_prediction: float,
     prediction_days: int,
     grand_total: int,
 ) -> bytes:
     """
     Generate a multi-sheet prediction template Excel.
-    products: [{"product_no": str, "skus": list[dict]}, ...]
+    products: [{"product_no": str, "skus": list[dict], "daily_prediction": float}, ...]
     Each product gets its own sheet tab named "Restock Demand template {product_no}".
+    Per-product daily_prediction is read from each product dict (defaults to 60 if missing).
     """
     import openpyxl as xl
     wb = xl.Workbook()
@@ -593,6 +593,7 @@ def batch_generate_template_excel(
     for p in products:
         product_no = p["product_no"]
         skus = p["skus"]
+        daily_prediction = float(p.get("daily_prediction", 60))
         if not skus:
             continue
         # Sheet names max 31 chars in Excel

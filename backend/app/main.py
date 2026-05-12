@@ -3188,9 +3188,13 @@ async def stock_prediction_generate_template(req: GenerateTemplateRequest):
 
 # ─── Batch Generate Template ─────────────────────────────────────────────────
 
-class BatchTemplateRequest(BaseModel):
-    product_nos: list[str]
+class BatchProductItem(BaseModel):
+    product_no: str
     daily_prediction: float = 60
+
+
+class BatchTemplateRequest(BaseModel):
+    products: list[BatchProductItem]
     prediction_days: int = 90
     months: list[MonthAllocation] = []
     upload_ids: list[int] = []
@@ -3200,6 +3204,7 @@ class BatchTemplateRequest(BaseModel):
 async def stock_prediction_batch_generate(req: BatchTemplateRequest):
     """
     Generate a single Excel with one sheet per product number.
+    Each product can have its own daily_prediction (orders/day).
     Products with no ERP data are silently skipped.
     """
     from fastapi.responses import Response
@@ -3209,32 +3214,35 @@ async def stock_prediction_batch_generate(req: BatchTemplateRequest):
     if not months:
         months = [{"label": "Sep", "pct": 30}, {"label": "Oct", "pct": 35}, {"label": "Nov", "pct": 40}]
 
-    # grand_total is fetched once for all products
+    # grand_total is fetched once for all products (used in header context only)
     summary = erp.get_sku_summary(uid_list)
     grand_total = summary["grand_total"]
 
     products = []
     missing = []
-    for pno in req.product_nos:
-        pno = pno.strip()
+    for item in req.products:
+        pno = item.product_no.strip()
         if not pno:
             continue
         skus = erp.get_skus_for_product(pno, uid_list)
         if skus:
-            products.append({"product_no": pno, "skus": skus})
+            products.append({
+                "product_no": pno,
+                "skus": skus,
+                "daily_prediction": item.daily_prediction,
+            })
         else:
             missing.append(pno)
 
     if not products:
         raise HTTPException(
             status_code=404,
-            detail=f"No SKU data found for any of: {', '.join(req.product_nos)}",
+            detail=f"No SKU data found for any of: {', '.join(p.product_no for p in req.products)}",
         )
 
     xlsx = sp.batch_generate_template_excel(
         products=products,
         months=months,
-        daily_prediction=req.daily_prediction,
         prediction_days=req.prediction_days,
         grand_total=grand_total,
     )
