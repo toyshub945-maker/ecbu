@@ -86,12 +86,14 @@ function formatDateRange(record: AdRecord): string {
 }
 
 function getAdCostRateCellStyle(rate: number): React.CSSProperties {
-  if (rate < 6)   return { backgroundColor: "#4CAF50", color: "#fff" };    // 5.x → green
-  if (rate < 7)   return { backgroundColor: "#FFE0B2", color: "#BF360C" }; // 6.x → light peach
-  if (rate < 8)   return { backgroundColor: "#FFCC80", color: "#E65100" }; // 7.x → peach-orange
-  if (rate < 9)   return { backgroundColor: "#FFA726", color: "#fff" };    // 8.x → amber
-  if (rate < 10)  return { backgroundColor: "#FF7043", color: "#fff" };    // 9.x → orange-red
-  return           { backgroundColor: "#F44336", color: "#fff" };           // 10+ → red
+  // Round to 1 decimal so colour matches the displayed value (e.g. 5.98 → 6.0 → not green)
+  const r = Math.round(rate * 10) / 10;
+  if (r < 6)   return { backgroundColor: "#4CAF50", color: "#fff" };    // <6%   → green
+  if (r < 7)   return { backgroundColor: "#FFE0B2", color: "#BF360C" }; // 6–6.9% → light peach
+  if (r < 8)   return { backgroundColor: "#FFCC80", color: "#E65100" }; // 7–7.9% → peach-orange
+  if (r < 9)   return { backgroundColor: "#FFA726", color: "#fff" };    // 8–8.9% → amber
+  if (r < 10)  return { backgroundColor: "#FF7043", color: "#fff" };    // 9–9.9% → orange-red
+  return        { backgroundColor: "#F44336", color: "#fff" };           // ≥10%   → red
 }
 
 function getBudgetAdjustmentColor(adjustment: string, budget: number): string {
