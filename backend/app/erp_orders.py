@@ -5,7 +5,7 @@ import io
 from collections import defaultdict
 from typing import Optional
 
-import openpyxl
+import pandas as pd
 from . import db
 
 # ── TikTok Store → TT code mapping ────────────────────────────────────────────
@@ -40,7 +40,7 @@ def _store_to_platform(store_name: str | None) -> str:
 
 def parse_erp_excel(file_content: bytes) -> list[dict]:
     """
-    Parse an ERP OrderManagement Excel export.
+    Parse an ERP OrderManagement Excel export using pandas (fast path).
 
     Expected columns (row 1 headers):
       System Order Number | Store | SKU | Product Name | MSKU | TikTok Warehouse
@@ -51,70 +51,75 @@ def parse_erp_excel(file_content: bytes) -> list[dict]:
       tt1_orders, tt2_orders, tt3_orders, tt4_orders,
       shein_orders, other_orders, total_orders
     """
-    wb = openpyxl.load_workbook(io.BytesIO(file_content), data_only=True)
-    ws = wb.active
+    # Read with dtype=str to avoid scientific-notation issues on large IDs
+    df = pd.read_excel(io.BytesIO(file_content), dtype=str)
 
-    # Detect column positions from header row
-    header = {str(cell.value).strip().lower(): cell.column - 1
-              for cell in ws[1] if cell.value}
+    # Normalise column names to lowercase stripped strings
+    df.columns = [str(c).strip().lower() for c in df.columns]
 
-    order_col = header.get("system order number",
-                  header.get("order number",
-                  header.get("ordernumber", None)))
-    store_col = header.get("store", None)
-    sku_col   = header.get("sku", None)
-    msku_col  = header.get("msku",
-                  header.get("seller sku",
-                  header.get("sellersku", None)))
+    # Locate required / optional columns
+    def _find_col(*candidates: str) -> str | None:
+        for c in candidates:
+            if c in df.columns:
+                return c
+        return None
+
+    order_col = _find_col("system order number", "order number", "ordernumber")
+    store_col = _find_col("store")
+    sku_col   = _find_col("sku")
+    msku_col  = _find_col("msku", "seller sku", "sellersku")
 
     if sku_col is None:
         raise ValueError("Cannot find 'SKU' column in the uploaded file")
 
-    # Aggregate counts: sku → {platform: n, ...}
-    sku_counts: dict[str, dict[str, int]] = defaultdict(
-        lambda: {"tt1": 0, "tt2": 0, "tt3": 0, "tt4": 0, "shein": 0, "other": 0}
-    )
-    # Track the MSKU for each SKU (last non-empty value wins; one SKU → one MSKU)
+    # Drop rows with no order number (cancelled / blank lines)
+    if order_col:
+        df = df[df[order_col].notna() & (df[order_col].str.strip() != "") & (df[order_col] != "nan")]
+
+    # Drop rows with no SKU
+    df = df[df[sku_col].notna() & (df[sku_col].str.strip() != "") & (df[sku_col] != "nan")]
+    df = df.copy()
+    df["_sku"] = df[sku_col].str.strip()
+
+    # Map store → platform label using vectorised apply
+    if store_col:
+        df["_platform"] = df[store_col].apply(
+            lambda x: _store_to_platform(str(x) if pd.notna(x) and str(x) not in ("nan", "") else None)
+        )
+    else:
+        df["_platform"] = "other"
+
+    # Collect first non-empty MSKU per SKU
     sku_msku: dict[str, str] = {}
+    if msku_col:
+        msku_df = df[df[msku_col].notna() & (df[msku_col] != "nan") & (df[msku_col].str.strip() != "")][
+            ["_sku", msku_col]
+        ].drop_duplicates("_sku")
+        sku_msku = dict(zip(msku_df["_sku"], msku_df[msku_col].str.strip()))
 
-    for row_vals in ws.iter_rows(min_row=2, values_only=True):
-        # Skip rows with no order number (cancelled / blank)
-        if order_col is not None:
-            order_val = row_vals[order_col] if order_col < len(row_vals) else None
-            if not order_val:
-                continue
+    # Aggregate counts per (sku, platform)
+    counts = df.groupby(["_sku", "_platform"]).size().reset_index(name="_n")
+    pivot = (
+        counts.pivot(index="_sku", columns="_platform", values="_n")
+        .fillna(0)
+        .astype(int)
+    )
 
-        sku_val = row_vals[sku_col] if sku_col < len(row_vals) else None
-        if not sku_val or str(sku_val).strip() in ("", "nan", "None"):
-            continue
-        sku = str(sku_val).strip()
-
-        store_val = row_vals[store_col] if (store_col is not None and store_col < len(row_vals)) else None
-        platform  = _store_to_platform(str(store_val) if store_val else None)
-        sku_counts[sku][platform] += 1
-
-        # Capture MSKU (prefer first non-empty)
-        if msku_col is not None and sku not in sku_msku:
-            msku_val = row_vals[msku_col] if msku_col < len(row_vals) else None
-            if msku_val and str(msku_val).strip() not in ("", "nan", "None"):
-                sku_msku[sku] = str(msku_val).strip()
-
-    # Build result list
     results = []
-    for sku, counts in sku_counts.items():
+    for sku, row in pivot.iterrows():
         base_sku = sku.split("-")[0] if "-" in sku else sku
-        total    = sum(counts.values())
+        total    = int(row.sum())
         results.append({
-            "sku":           sku,
-            "base_sku":      base_sku,
-            "msku":          sku_msku.get(sku),
-            "tt1_orders":    counts["tt1"],
-            "tt2_orders":    counts["tt2"],
-            "tt3_orders":    counts["tt3"],
-            "tt4_orders":    counts["tt4"],
-            "shein_orders":  counts["shein"],
-            "other_orders":  counts["other"],
-            "total_orders":  total,   # ALL platforms combined
+            "sku":          sku,
+            "base_sku":     base_sku,
+            "msku":         sku_msku.get(sku),
+            "tt1_orders":   int(row.get("tt1", 0)),
+            "tt2_orders":   int(row.get("tt2", 0)),
+            "tt3_orders":   int(row.get("tt3", 0)),
+            "tt4_orders":   int(row.get("tt4", 0)),
+            "shein_orders": int(row.get("shein", 0)),
+            "other_orders": int(row.get("other", 0)),
+            "total_orders": total,
         })
 
     return results
@@ -134,20 +139,23 @@ def save_erp_upload(filename: str, period_label: str, rows: list[dict]) -> dict:
         )
         upload_id = cur.lastrowid
 
-        # Insert per-SKU rows
-        for r in rows:
-            prod_no = product_sku_map.get(r["base_sku"])
-            cur.execute("""
-                INSERT INTO erp_sku_orders
-                    (upload_id, sku, base_sku, msku, product_no,
-                     tt1_orders, tt2_orders, tt3_orders, tt4_orders,
-                     shein_orders, other_orders, total_orders)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-            """, (
-                upload_id, r["sku"], r["base_sku"], r.get("msku"), prod_no,
+        # Batch-insert all per-SKU rows in one shot (much faster than individual INSERTs)
+        params = [
+            (
+                upload_id, r["sku"], r["base_sku"], r.get("msku"),
+                product_sku_map.get(r["base_sku"]),
                 r["tt1_orders"], r["tt2_orders"], r["tt3_orders"], r["tt4_orders"],
                 r.get("shein_orders", 0), r["other_orders"], r["total_orders"],
-            ))
+            )
+            for r in rows
+        ]
+        cur.executemany("""
+            INSERT INTO erp_sku_orders
+                (upload_id, sku, base_sku, msku, product_no,
+                 tt1_orders, tt2_orders, tt3_orders, tt4_orders,
+                 shein_orders, other_orders, total_orders)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+        """, params)
 
     return get_upload(upload_id)
 
