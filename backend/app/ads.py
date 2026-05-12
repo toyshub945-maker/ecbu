@@ -37,23 +37,51 @@ def _normalise_status(raw: str) -> str | None:
     return None
 
 
+def _to_float(val) -> float:
+    """Safely convert a cell value to float, stripping USD/$ if present."""
+    if val is None:
+        return 0.0
+    if isinstance(val, (int, float)):
+        return float(val)
+    s = str(val).strip().replace("USD", "").replace("$", "").replace(",", "").strip()
+    try:
+        return float(s)
+    except (ValueError, TypeError):
+        return 0.0
+
+
 def parse_ads_excel(file_content: bytes, store_name: str, date: str, date_range_end: str | None = None) -> list[dict]:
     df = pd.read_excel(io.BytesIO(file_content))
     records = []
 
-    for _, row in df.iterrows():
-        campaign_name = str(row.get("Campaign name", row.get("Campaign Name", "")))
+    # Detect whether this export has a Status column
+    has_status_col = any(str(c).strip().lower() == "status" for c in df.columns)
 
+    for _, row in df.iterrows():
+        campaign_name = str(row.get("Campaign name", row.get("Campaign Name", "")) or "").strip()
         if not campaign_name or campaign_name == "nan":
             continue
 
-        # ── Read status from TikTok export; skip rows that aren't Active/Not delivering ──
-        raw_status = str(row.get("Status", row.get("status", "Active")) or "Active")
-        status = _normalise_status(raw_status)
-        if status is None:
-            continue   # skip Paused, Deleted, Completed, etc.
+        # ── Parse cost first — skip rows with zero spend (budget not yet used) ──
+        cost      = _to_float(row.get("Cost", 0))
+        net_cost  = _to_float(row.get("Net Cost", row.get("Net cost", 0)))
 
-        # ── Extract product number from campaign name ─────────────────────────
+        # Only import rows that have actual ad spend
+        if cost <= 0 and net_cost <= 0:
+            continue
+
+        # ── Status ────────────────────────────────────────────────────────────
+        if has_status_col:
+            raw_status = str(row.get("Status", row.get("status", "Active")) or "Active")
+            status = _normalise_status(raw_status)
+            if status is None:
+                continue   # skip Paused / Deleted / Completed
+        else:
+            # No Status column (TikTok Product Campaign export) — if it has
+            # spend it was delivering; mark as Active
+            status = "Active"
+
+        # ── Extract product number from campaign name ──────────────────────
         product_number = ""
         if "Product" in campaign_name:
             parts = campaign_name.split("Product")
@@ -61,41 +89,41 @@ def parse_ads_excel(file_content: bytes, store_name: str, date: str, date_range_
                 product_number = parts[1].strip()
         product_number = product_number or campaign_name
 
-        cost          = float(row.get("Cost", 0) or 0)
-        gross_revenue = float(row.get("Gross revenue", row.get("Gross Revenue", 0)) or 0)
-        roi           = float(row.get("ROI", 0) or 0)
-        cost_per_order = float(row.get("Cost per order", row.get("Cost Per Order", 0)) or 0)
-        orders        = float(row.get("SKU orders", row.get("Orders", 0)) or 0)
-        current_budget = float(row.get("Current budget", row.get("Budget", 0)) or 0)
+        gross_revenue  = _to_float(row.get("Gross revenue", row.get("Gross Revenue", 0)))
+        roi            = _to_float(row.get("ROI", 0))
+        cost_per_order = _to_float(row.get("Cost per order", row.get("Cost Per Order", 0)))
+        orders         = _to_float(row.get("SKU orders", row.get("Orders", 0)))
+        current_budget = _to_float(row.get("Current budget", row.get("Budget", 0)))
 
+        # Derive ad cost rate and cost-per-order if not already in export
         if gross_revenue > 0:
             ad_cost_rate = (cost / gross_revenue) * 100
         else:
             ad_cost_rate = 0
 
-        if cost > 0 and orders > 0:
+        if cost > 0 and orders > 0 and cost_per_order == 0:
             cost_per_order = cost / orders
 
         records.append({
-            "store_name":      store_name,
-            "product_number":  str(product_number),
-            "date":            date,
-            "date_range_end":  date_range_end,
-            "status":          status,          # ← real status from file
-            "orders":          int(orders),
-            "roi":             roi,
-            "cost_per_order":  cost_per_order,
-            "ad_cost_rate":    round(ad_cost_rate, 2),
-            "ad_spend":        cost,
-            "revenue":         gross_revenue,
-            "campaign_budget": current_budget,
+            "store_name":        store_name,
+            "product_number":    str(product_number),
+            "date":              date,
+            "date_range_end":    date_range_end,
+            "status":            status,
+            "orders":            int(orders),
+            "roi":               roi,
+            "cost_per_order":    cost_per_order,
+            "ad_cost_rate":      round(ad_cost_rate, 2),
+            "ad_spend":          cost,
+            "revenue":           gross_revenue,
+            "campaign_budget":   current_budget,
             "budget_adjustment": "",
             "extra_budget_id":   "",
-            "ads_open_date":  None,
-            "total_funds":    None,
-            "profit":         None,
-            "color_flag":     None,
-            "notes":          "",
+            "ads_open_date":     None,
+            "total_funds":       None,
+            "profit":            None,
+            "color_flag":        None,
+            "notes":             "",
         })
 
     return records
