@@ -549,6 +549,8 @@ def generate_template_excel(
             cell.alignment = Alignment(horizontal="center", vertical="center")
         # SKU left-aligned
         ws.cell(row=row_num, column=2).alignment = Alignment(horizontal="left", vertical="center")
+        # SKU Quota Rate (col H = 8) formatted as percentage
+        ws.cell(row=row_num, column=8).number_format = "0.00%"
 
     # ── Freeze below header row ────────────────────────────────────────────────
     ws.freeze_panes = "A3"
