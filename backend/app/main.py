@@ -37,21 +37,6 @@ def health():
     return {"status": "ok", "time": datetime.utcnow().isoformat() + "Z"}
 
 
-# ─── One-time DB upload (remove after use) ───────────────────────────────────
-
-@app.post("/api/admin/upload-db")
-async def upload_db(file: UploadFile = File(...), secret: str = Form(...)):
-    if secret != os.environ.get("DB_UPLOAD_SECRET", ""):
-        raise HTTPException(status_code=403, detail="Forbidden")
-    content = await file.read()
-    db_path = config.DB_PATH
-    import shutil as _sh
-    tmp = db_path + ".tmp"
-    with open(tmp, "wb") as f:
-        f.write(content)
-    _sh.move(tmp, db_path)
-    return {"ok": True, "size": len(content), "path": db_path}
-
 
 # ─── Auth ────────────────────────────────────────────────────────────────────
 
