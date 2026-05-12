@@ -4,9 +4,53 @@ from openpyxl import load_workbook
 import os
 import sys
 import re
+import zipfile
+import tempfile
 
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
+# Minimal valid stylesheet — used when TikTok template has broken XML in xl/styles.xml
+_MINIMAL_STYLES = b'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
+  <fills count="2">
+    <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="gray125"/></fill>
+  </fills>
+  <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>
+</styleSheet>'''
+
+
+def _load_workbook_safe(path):
+    """Load workbook; if stylesheet XML is invalid (common in TikTok templates),
+    patch it with a minimal valid stylesheet and retry."""
+    try:
+        return load_workbook(path, keep_links=False)
+    except Exception as e:
+        err = str(e).lower()
+        if "stylesheet" not in err and "xml" not in err and "invalid" not in err:
+            raise  # Not a stylesheet issue — re-raise immediately
+
+    # ── Patch broken styles.xml and reload ──────────────────────────────────
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix='.xlsx')
+    os.close(tmp_fd)
+    try:
+        with zipfile.ZipFile(path, 'r') as zin:
+            with zipfile.ZipFile(tmp_path, 'w', zipfile.ZIP_DEFLATED) as zout:
+                for item in zin.infolist():
+                    if item.filename == 'xl/styles.xml':
+                        zout.writestr(item.filename, _MINIMAL_STYLES)
+                    else:
+                        zout.writestr(item, zin.read(item.filename))
+        return load_workbook(tmp_path, keep_links=False)
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
 
 def normalize_sku(sku):
     if pd.isna(sku):
@@ -233,7 +277,7 @@ def run_automation(msku_mapping_path, inventory_path, template_path, output_path
     logs.append("[Step 3] Updating TikTok Template (openpyxl)")
 
     try:
-        wb = load_workbook(template_path)
+        wb = _load_workbook_safe(template_path)
         ws = wb.worksheets[0]
 
         # Disable sheet protection if set
