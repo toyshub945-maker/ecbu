@@ -388,6 +388,15 @@ export default function StockPredictionPage() {
 
   useEffect(() => { fetchErpUploads(); }, []);
 
+  // ── Load ExcelJS from CDN for client-side export ──────────────────────────
+  useEffect(() => {
+    if (typeof window === "undefined" || (window as any).ExcelJS) return;
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js";
+    script.async = true;
+    document.head.appendChild(script);
+  }, []);
+
   async function handleErpUpload(file: File) {
     if (!periodLabel.trim()) { setError("Please enter a period label (e.g. 2025 Full Year)"); return; }
     setErpUploading(true);
@@ -436,24 +445,137 @@ export default function StockPredictionPage() {
   async function handleExport() {
     if (!activeData) return;
     setExporting(true);
+    setError(null);
     try {
-      const res = await fetch(backendUrl("/api/stock-prediction/export"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          skus: activeData.skus,
-          months: months.map(m => ({ label: m.label, pct: m.pct })),
-          daily_prediction: dailyPrediction,
-          prediction_days: predictionDays,
-        }),
+      const ExcelJS: any = (window as any).ExcelJS;
+      if (!ExcelJS) {
+        setError("ExcelJS not ready — please wait a moment and try again.");
+        return;
+      }
+
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet("Stock Prediction");
+
+      // ── Column definitions ─────────────────────────────────────────────────
+      const baseHeaders = [
+        "Product No", "SKU", "TT1 Orders", "TT2 Orders", "TT3 Orders", "TT4 Orders",
+        "Total Orders", "Quota Rate %", "Now Stock", "Expected Demand",
+      ];
+      const monthLabels = months.map(m => m.label);
+      const allHeaders = [...baseHeaders, ...monthLabels, "Selling Price", "Profit Margin %", "R&R Rate %"];
+
+      const colWidths = [16, 28, ...Array(allHeaders.length - 2).fill(14)];
+      ws.columns = allHeaders.map((h, i) => ({ header: h, key: `c${i}`, width: colWidths[i] ?? 14 }));
+
+      // Style header row
+      const headerRow = ws.getRow(1);
+      headerRow.eachCell((cell: any) => {
+        cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E293B" } };
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+        cell.border = {
+          top: { style: "thin", color: { argb: "FFE2E8F0" } },
+          bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+          left: { style: "thin", color: { argb: "FFE2E8F0" } },
+          right: { style: "thin", color: { argb: "FFE2E8F0" } },
+        };
       });
-      if (!res.ok) throw new Error("Export failed");
-      const blob = await res.blob();
+      headerRow.height = 20;
+
+      // ── Group SKUs by product ──────────────────────────────────────────────
+      const byProduct: Record<string, SkuRow[]> = {};
+      for (const sku of activeData.skus) {
+        const key = sku.product_no || sku.sku.split("-")[0];
+        if (!byProduct[key]) byProduct[key] = [];
+        byProduct[key].push(sku);
+      }
+      const gt = activeData.grand_total || activeData.skus.reduce((s, r) => s + r.total_orders, 0);
+
+      const thinBorder = {
+        top: { style: "thin", color: { argb: "FFE2E8F0" } },
+        bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+        left: { style: "thin", color: { argb: "FFE2E8F0" } },
+        right: { style: "thin", color: { argb: "FFE2E8F0" } },
+      };
+
+      for (const [prodNo, prodSkus] of Object.entries(byProduct)) {
+        // SKU rows
+        for (const sku of prodSkus) {
+          const quota = gt > 0 ? sku.total_orders / gt : 0;
+          const expected = dailyPrediction * predictionDays * quota;
+          const rowData: (string | number)[] = [
+            prodNo,
+            sku.sku,
+            sku.tt1_orders ?? 0,
+            sku.tt2_orders ?? 0,
+            sku.tt3_orders ?? 0,
+            sku.tt4_orders ?? 0,
+            sku.total_orders,
+            parseFloat((quota * 100).toFixed(4)),
+            sku.current_stock ?? 0,
+            parseFloat(expected.toFixed(1)),
+          ];
+          for (const m of months) {
+            rowData.push(parseFloat((expected * m.pct / 100).toFixed(1)));
+          }
+          rowData.push(
+            sku.selling_price ?? "",
+            sku.profit_margin ? parseFloat((sku.profit_margin * 100).toFixed(2)) : "",
+            sku.rr_rate ? parseFloat((sku.rr_rate * 100).toFixed(2)) : "",
+          );
+
+          const r = ws.addRow(rowData);
+          r.eachCell((cell: any) => {
+            cell.font = { size: 10 };
+            cell.border = thinBorder;
+            cell.alignment = { horizontal: "center" };
+          });
+        }
+
+        // Subtotal row
+        const prodTotal = prodSkus.reduce((s, r) => s + r.total_orders, 0);
+        const prodQuota = gt > 0 ? prodTotal / gt : 0;
+        const prodExpected = dailyPrediction * predictionDays * prodQuota;
+        const subData: (string | number)[] = [
+          `[${prodNo}] TOTAL`,
+          `${prodSkus.length} SKUs`,
+          prodSkus.reduce((s, r) => s + (r.tt1_orders ?? 0), 0),
+          prodSkus.reduce((s, r) => s + (r.tt2_orders ?? 0), 0),
+          prodSkus.reduce((s, r) => s + (r.tt3_orders ?? 0), 0),
+          prodSkus.reduce((s, r) => s + (r.tt4_orders ?? 0), 0),
+          prodTotal,
+          parseFloat((prodQuota * 100).toFixed(4)),
+          prodSkus.reduce((s, r) => s + (r.current_stock ?? 0), 0),
+          parseFloat(prodExpected.toFixed(1)),
+        ];
+        for (const m of months) {
+          subData.push(parseFloat((prodExpected * m.pct / 100).toFixed(1)));
+        }
+        subData.push("", "", "");
+
+        const sr = ws.addRow(subData);
+        sr.eachCell((cell: any) => {
+          cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF334155" } };
+          cell.border = thinBorder;
+          cell.alignment = { horizontal: "center" };
+        });
+      }
+
+      ws.views = [{ state: "frozen", ySplit: 1 }];
+
+      // ── Download ───────────────────────────────────────────────────────────
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = "stock_prediction.xlsx";
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Export failed");
