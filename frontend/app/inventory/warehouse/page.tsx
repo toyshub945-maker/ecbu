@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { useTheme } from "@/components/ThemeProvider";
 
@@ -58,6 +58,18 @@ export default function WarehouseBotPage() {
   const ref2 = useRef<HTMLInputElement>(null);
 
   const isReady = loaded1 && loaded2;
+
+  // ── Load ExcelJS from CDN (browser build) — same approach as the standalone HTML app ──
+  useEffect(() => {
+    if ((window as any).ExcelJS) return; // already loaded
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js";
+    script.async = true;
+    document.head.appendChild(script);
+    return () => {
+      // Don't remove — keep cached across re-renders
+    };
+  }, []);
 
   // ── File 1: Present Stock ──────────────────────────────────────────────────
   const handlePresentStock = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -215,12 +227,12 @@ export default function WarehouseBotPage() {
     setStatusColor("blue");
 
     try {
-      // ExcelJS: handle both CommonJS (.Workbook) and ES-module (.default.Workbook) packaging
-      const excelMod = await import("exceljs");
+      // Use the CDN-loaded ExcelJS browser build (window.ExcelJS) — same as the
+      // standalone HTML reference app. The npm package (Node.js build) breaks in
+      // Vercel's minified browser bundle with "n is not a function".
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ExcelJS: any = (excelMod as any).default ?? excelMod;
-
-      const { saveAs } = await import("file-saver");
+      const ExcelJS: any = (window as any).ExcelJS;
+      if (!ExcelJS) throw new Error("ExcelJS not ready — please wait a moment and try again.");
 
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(templateArrayBuffer);
@@ -322,10 +334,16 @@ export default function WarehouseBotPage() {
       });
 
       const buffer = await workbook.xlsx.writeBuffer();
-      saveAs(
-        new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
-        "Updated_Stock_" + templateFileName
-      );
+      // Plain blob download — no file-saver dependency needed
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = "Updated_Stock_" + templateFileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
 
       setStatusMsg("✅ Excel exported successfully!");
       setStatusColor("green");
