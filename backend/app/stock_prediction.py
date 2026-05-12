@@ -205,6 +205,9 @@ def _enrich_from_db(skus: list[dict]) -> None:
                         product_margins[str(row["product_no"])] = margin
 
             # ── 3. R&R rate by msku (case-insensitive) ────────────────────────
+            #   rr_order_items.msku format: "STP039-Black MB-6"
+            #   We match using MSKU from ERP data (stored in erp_sku_orders.msku),
+            #   falling back to the plain sku field if no msku is available.
             cur.execute("""
                 SELECT lower(o.msku) as msku_lower,
                        SUM(o.order_qty)  as total_orders,
@@ -223,8 +226,11 @@ def _enrich_from_db(skus: list[dict]) -> None:
 
         # Apply enrichments
         for s in skus:
-            sku_lower = s["sku"].lower()
-            prod_no = str(s["product_no"])
+            sku_lower  = s["sku"].lower()
+            # msku is stored from ERP upload (e.g. "STP039-Black MB-6")
+            # fallback: try base_sku if msku not present
+            msku_lower = (s.get("msku") or "").lower() or sku_lower
+            prod_no    = str(s.get("product_no") or "")
 
             # Stock from warehouse (override Excel value)
             if sku_lower in wh_stock:
@@ -247,9 +253,10 @@ def _enrich_from_db(skus: list[dict]) -> None:
             else:
                 s["margin_source"] = "excel"
 
-            # R&R rate from rr tables (override Excel value if found)
-            if sku_lower in rr_map:
-                s["rr_rate"] = rr_map[sku_lower]
+            # R&R rate — match by MSKU first (from ERP data), then fallback to sku
+            rr_hit = rr_map.get(msku_lower) or rr_map.get(sku_lower)
+            if rr_hit is not None:
+                s["rr_rate"] = rr_hit
                 s["rr_source"] = "rr_db"
             else:
                 s["rr_source"] = "excel"
@@ -374,6 +381,153 @@ def export_prediction_excel(skus: list[dict], months: list[dict], daily_predicti
 
     # Freeze header
     ws.freeze_panes = "A2"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf.read()
+
+
+def generate_template_excel(
+    product_no: str,
+    skus: list[dict],
+    months: list[dict],
+    daily_prediction: float,
+    prediction_days: int,
+    grand_total: int,
+) -> bytes:
+    """
+    Fill the exact "Template prediction.xlsx" layout for a single product.
+
+    Template structure:
+      Sheet name : "Restock Demand template {product_no}"
+      Row 1      : instruction text (bold, wrapped)
+      Row 2      : headers, yellow fill FFFFF3CE, bold
+                   A=Image | B=SKU | C=TT1-Orders | D=TT2-Orders | E=TT3-Orders | F=TT4-Orders
+                   G=Total Orders | H=SKU Quota Rate | I=Now Stock | J=Expected Demand
+                   K..K+n-1 = month columns  |  last-3=Selling price | last-2=Profit margin | last-1=Return and refund rate
+      Row 3+     : data rows, height 16.5
+    """
+    import openpyxl as xl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+    wb = xl.Workbook()
+    ws = wb.active
+    ws.title = f"Restock Demand template {product_no}"
+
+    # ── Styles ────────────────────────────────────────────────────────────────
+    YELLOW_FILL = PatternFill("solid", fgColor="FFFFF3CE")
+    header_font = Font(bold=True, size=10)
+    body_font   = Font(size=10)
+    thin = Border(
+        left=Side(style="thin",   color="D9D9D9"),
+        right=Side(style="thin",  color="D9D9D9"),
+        top=Side(style="thin",    color="D9D9D9"),
+        bottom=Side(style="thin", color="D9D9D9"),
+    )
+
+    # ── Column widths (matching exact template widths) ────────────────────────
+    month_count = len(months)
+    # Fixed cols: A-J (10 cols) + month cols + 3 tail cols
+    COL_WIDTHS = {
+        "A": 14.875,   # Image
+        "B": 30.25,    # SKU
+        "C": 11.5,     # TT1-Orders
+        "D": 11.875,   # TT2-Orders
+        "E": 11.5,     # TT3-Orders
+        "F": 11.5,     # TT4-Orders
+        "G": 11.5,     # Total Orders
+        "H": 13.0,     # SKU Quota Rate
+        "I": 10.0,     # Now Stock
+        "J": 19.5,     # Expected Demand
+    }
+    # Month cols and tail cols
+    from openpyxl.utils import get_column_letter
+    for i in range(month_count):
+        col_letter = get_column_letter(11 + i)
+        COL_WIDTHS[col_letter] = 10.0
+    # Tail cols: Selling price, Profit margin, R&R rate
+    tail_start = 11 + month_count
+    COL_WIDTHS[get_column_letter(tail_start)]     = 16.25
+    COL_WIDTHS[get_column_letter(tail_start + 1)] = 11.75
+    COL_WIDTHS[get_column_letter(tail_start + 2)] = 18.625
+
+    for col_letter, width in COL_WIDTHS.items():
+        ws.column_dimensions[col_letter].width = width
+
+    # ── Row 1: instruction text ────────────────────────────────────────────────
+    total_cols = 10 + month_count + 3
+    ws.row_dimensions[1].height = 41.25
+    ws.cell(row=1, column=1).value = (
+        f"Restock Demand Prediction — Product {product_no}\n"
+        f"Daily Prediction: {daily_prediction} orders/day  ×  {prediction_days} days  =  "
+        f"{int(daily_prediction * prediction_days)} total expected orders\n"
+        f"Grand total orders (all products): {grand_total}"
+    )
+    ws.cell(row=1, column=1).font = Font(bold=True, size=10)
+    ws.cell(row=1, column=1).alignment = Alignment(wrap_text=True, vertical="center")
+    if total_cols > 1:
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=total_cols)
+
+    # ── Row 2: headers ─────────────────────────────────────────────────────────
+    ws.row_dimensions[2].height = 18.0
+    month_header_labels = [m["label"] for m in months]
+    header_values = (
+        ["Image", "SKU", "TT1-Orders", "TT2-Orders", "TT3-Orders", "TT4-Orders",
+         "Total Orders", "SKU Quota Rate", "Now Stock", "Expected Demand"]
+        + month_header_labels
+        + ["Selling price", "Profit margin", "Return and refund rate"]
+    )
+    for col_idx, val in enumerate(header_values, 1):
+        cell = ws.cell(row=2, column=col_idx)
+        cell.value = val
+        cell.font = header_font
+        cell.fill = YELLOW_FILL
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = thin
+
+    # ── Rows 3+: data ──────────────────────────────────────────────────────────
+    for s in skus:
+        quota = s["total_orders"] / grand_total if grand_total > 0 else 0
+        expected = daily_prediction * prediction_days * quota
+
+        row_data = [
+            "",                                    # A: Image (empty)
+            s["sku"],                              # B: SKU
+            s.get("tt1_orders", 0),               # C
+            s.get("tt2_orders", 0),               # D
+            s.get("tt3_orders", 0),               # E
+            s.get("tt4_orders", 0),               # F
+            s["total_orders"],                    # G
+            round(quota, 8),                      # H: SKU Quota Rate (as decimal)
+            s.get("current_stock", 0),            # I
+            round(expected, 1),                   # J
+        ]
+        for m in months:
+            row_data.append(round(expected * m["pct"] / 100, 1))
+
+        sp = s.get("selling_price")
+        pm = s.get("profit_margin")
+        rr = s.get("rr_rate")
+        row_data += [
+            round(sp, 2) if sp else "",
+            round(pm * 100, 2) if pm else "",
+            round(rr * 100, 2) if rr else "",
+        ]
+
+        row_num = ws.max_row + 1
+        ws.row_dimensions[row_num].height = 16.5
+        for col_idx, val in enumerate(row_data, 1):
+            cell = ws.cell(row=row_num, column=col_idx)
+            cell.value = val
+            cell.font = body_font
+            cell.border = thin
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+        # SKU left-aligned
+        ws.cell(row=row_num, column=2).alignment = Alignment(horizontal="left", vertical="center")
+
+    # ── Freeze below header row ────────────────────────────────────────────────
+    ws.freeze_panes = "A3"
 
     buf = io.BytesIO()
     wb.save(buf)

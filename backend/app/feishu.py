@@ -329,119 +329,131 @@ def fetch_warehouse_inventory(sku_warehouse_group: dict | None = None) -> dict:
     return inventory_agg
 
 
-# ─── Wiki-based Warehouse Sync (14 sheets) ─────────────────────────────────────
+# ─── Wiki-based Warehouse Sync ─────────────────────────────────────────────────
+# Optimised: resolve the spreadsheet token ONCE, then fetch all sheets in parallel.
 
-# Use wiki API to resolve and fetch sheet data
-def fetch_wiki_sheet_data(sheet_id: str) -> list[dict]:
-    """Fetch records from Feishu wiki sheet.
-    
-    Uses wiki API to resolve token, then reads spreadsheet data.
+# Module-level cache so the expensive wiki/spreadsheet resolution is done at most
+# once per process lifetime (valid for hours; re-runs on backend restart).
+_WIKI_CACHE: dict[str, Any] = {
+    "spreadsheet_token": None,
+    "sheets": [],           # list of {sheet_id, title}
+    "fetched_at": 0.0,
+}
+_WIKI_CACHE_TTL = 3600  # seconds – re-resolve once per hour
+
+
+def _resolve_spreadsheet(force: bool = False) -> tuple[str, list[dict]]:
     """
-    import io
-    import requests
-    
-    try:
-        from openpyxl import load_workbook
-    except ImportError:
-        return []
-    
-    wiki_token = config.FEISHU_WIKI_TOKEN
+    Return (spreadsheet_token, sheets_list) using cached values if possible.
+    Performs at most 2 HTTP requests (wiki resolve + sheet list).
+    """
+    now = time.time()
+    if (
+        not force
+        and _WIKI_CACHE["spreadsheet_token"]
+        and now - _WIKI_CACHE["fetched_at"] < _WIKI_CACHE_TTL
+    ):
+        return _WIKI_CACHE["spreadsheet_token"], _WIKI_CACHE["sheets"]
+
     headers = {"Authorization": f"Bearer {_get_tenant_token()}"}
-    
-    # Step 1: Resolve wiki token to get actual spreadsheet token
-    url = "https://open.feishu.cn/open-apis/wiki/v2/spaces/get_node"
-    r = requests.get(url, headers=headers, params={"token": wiki_token}, timeout=30)
-    
+
+    # Step 1 – resolve wiki node → spreadsheet token
+    r = requests.get(
+        "https://open.feishu.cn/open-apis/wiki/v2/spaces/get_node",
+        headers=headers,
+        params={"token": config.FEISHU_WIKI_TOKEN},
+        timeout=15,
+    )
     d = r.json() if r.status_code == 200 else {}
     obj_token = d.get("data", {}).get("node", {}).get("obj_token")
-    obj_type = d.get("data", {}).get("node", {}).get("obj_type")
-    
-    # Use the resolved token if we got one, otherwise use wiki token
-    spreadsheet_token = obj_token if obj_token else wiki_token
-    
-    # Step 2: Get sheet list to find the correct sheet title
-    sheets_url = f"https://open.feishu.cn/open-apis/sheets/v3/spreadsheets/{spreadsheet_token}/sheets/query"
-    r = requests.get(sheets_url, headers=headers, timeout=30)
-    
-    if r.status_code != 200:
-        return []
-    
-    sheets = r.json().get("data", {}).get("sheets", [])
-    
-    # Find matching sheet - use sheet_id for values API
-    sheet_identifier = sheet_id  # Default to using the ID directly
+    spreadsheet_token = obj_token or config.FEISHU_WIKI_TOKEN
+
+    # Step 2 – get sheet list
+    r2 = requests.get(
+        f"https://open.feishu.cn/open-apis/sheets/v3/spreadsheets/{spreadsheet_token}/sheets/query",
+        headers=headers,
+        timeout=15,
+    )
+    sheets = r2.json().get("data", {}).get("sheets", []) if r2.status_code == 200 else []
+
+    _WIKI_CACHE["spreadsheet_token"] = spreadsheet_token
+    _WIKI_CACHE["sheets"] = sheets
+    _WIKI_CACHE["fetched_at"] = now
+    return spreadsheet_token, sheets
+
+
+def _fetch_single_sheet(sheet_id: str, spreadsheet_token: str, sheets: list[dict]) -> list[dict]:
+    """
+    Fetch one sheet's rows.  Called in parallel by fetch_all_warehouse_from_wiki.
+    Returns list of {fields: {col: val}, _row_index: int, _sheet_id: str}.
+    """
+    headers = {"Authorization": f"Bearer {_get_tenant_token()}"}
+
+    # Resolve sheet identifier (prefer sheet_id match, fall back to title match)
+    sheet_identifier = sheet_id
     for s in sheets:
         if s.get("sheet_id") == sheet_id or s.get("title") == sheet_id:
-            sheet_identifier = s.get("sheet_id")  # Use sheet_id, not title
+            sheet_identifier = s.get("sheet_id")
             break
-    
-    # Step 3: Try reading data via spreadsheet v2 values API
-    # v2 uses range in URL path format: /values/{sheet_id}!A1:Z
-    values_url = f"https://open.feishu.cn/open-apis/sheets/v2/spreadsheets/{spreadsheet_token}/values/{sheet_identifier}!A1:Z5000"
-    
+
+    values_url = (
+        f"https://open.feishu.cn/open-apis/sheets/v2/spreadsheets"
+        f"/{spreadsheet_token}/values/{sheet_identifier}!A1:Z5000"
+    )
     try:
         r = requests.get(values_url, headers=headers, timeout=30)
-        
         if r.status_code == 200:
             data = r.json()
             if data.get("code") == 0:
-                val = data.get("data", {})
-                rows = val.get("valueRange", {}).get("values", [])
+                rows = data.get("data", {}).get("valueRange", {}).get("values", [])
                 if rows and len(rows) > 1:
                     headers_row = [str(v or "").strip() for v in rows[0]]
-                    all_records = []
+                    result = []
                     for ri, row in enumerate(rows[1:]):
-                        record = {"fields": {}, "_row_index": ri + 1} # ri+1 because rows[0] is header
+                        record: dict[str, Any] = {"fields": {}, "_row_index": ri + 1, "_sheet_id": sheet_id}
                         for i, h in enumerate(headers_row):
                             if i < len(row):
                                 record["fields"][h] = row[i]
-                        all_records.append(record)
-                    return all_records
-    except:
-        pass
-    
-    # Fallback: Try drive export
-    try:
-        export_url = f"https://open.feishu.cn/open-apis/drive/v1/files/{spreadsheet_token}/export"
-        r = requests.get(export_url, headers=headers, timeout=30)
-        
-        if r.status_code == 200:
-            data = r.json()
-            if data.get("code") == 0:
-                download_url = data.get("data", {}).get("download_url")
-                if download_url:
-                    resp = requests.get(download_url, timeout=60)
-                    if resp.status_code == 200:
-                        wb = load_workbook(io.BytesIO(resp.content), data_only=True)
-                        ws = wb[sheet_title] if sheet_title in wb.sheetnames else wb.active
-                        rows = list(ws.rows)
-                        if rows and len(rows) > 1:
-                            headers_row = [str(cell.value or "").strip() for cell in rows[0]]
-                            all_records = []
-                            for ri, row in enumerate(rows[1:]):
-                                values = [cell.value for cell in row]
-                                record = {"fields": {}, "_row_index": ri + 1}
-                                for i, h in enumerate(headers_row):
-                                    if i < len(values):
-                                        record["fields"][h] = values[i]
-                                all_records.append(record)
-                            return all_records
-    except:
-        pass
-    
+                        result.append(record)
+                    return result
+    except Exception as e:
+        print(f"Sheet {sheet_id} fetch error: {e}")
     return []
 
 
+def fetch_wiki_sheet_data(sheet_id: str) -> list[dict]:
+    """Fetch a single wiki sheet (convenience wrapper used by external callers)."""
+    spreadsheet_token, sheets = _resolve_spreadsheet()
+    return _fetch_single_sheet(sheet_id, spreadsheet_token, sheets)
+
+
 def fetch_all_warehouse_from_wiki() -> list[dict]:
-    """Fetch warehouse data from all configured wiki sheets."""
-    all_records = []
-    for sheet_id in config.WAREHOUSE_SHEET_IDS:
+    """
+    Fetch ALL configured warehouse sheets in parallel.
+
+    Key optimisations vs the old sequential approach:
+      • spreadsheet token + sheet list resolved ONCE (cached for 1 hour)
+      • all 15 sheet data calls run concurrently via ThreadPoolExecutor
+      • total time ≈ max(single_sheet_time) instead of sum(all_sheet_times)
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    spreadsheet_token, sheets = _resolve_spreadsheet()
+
+    sheet_ids = config.WAREHOUSE_SHEET_IDS
+    all_records: list[dict] = []
+
+    def _fetch(sid: str) -> list[dict]:
         try:
-            records = fetch_wiki_sheet_data(sheet_id)
-            for rec in records:
-                rec["_sheet_id"] = sheet_id
-            all_records.extend(records)
+            return _fetch_single_sheet(sid, spreadsheet_token, sheets)
         except Exception as e:
-            print(f"Failed to fetch sheet {sheet_id}: {e}")
-            continue
+            print(f"Failed to fetch sheet {sid}: {e}")
+            return []
+
+    # Up to 8 concurrent requests – keeps Feishu API happy while still being fast
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {pool.submit(_fetch, sid): sid for sid in sheet_ids}
+        for future in as_completed(futures):
+            all_records.extend(future.result())
+
     return all_records

@@ -20,7 +20,6 @@ export default function SheinStockPage() {
   const [logs, setLogs] = useState<string[]>([]);
   const [warehouseStatus, setWarehouseStatus] = useState<"loading" | "ready" | "error">("loading");
   const [warehouseSkuCount, setWarehouseSkuCount] = useState<number>(0);
-  const [warehouseFallback, setWarehouseFallback] = useState(false);
 
   const mskuInput = useRef<HTMLInputElement>(null);
   const templateInput = useRef<HTMLInputElement>(null);
@@ -131,11 +130,6 @@ export default function SheinStockPage() {
       .catch(() => setWarehouseStatus("error"));
   }, []);
 
-  const useWarehouseFallback = () => {
-    setWarehouseFallback(true);
-    setWarehouseStatus("ready");
-  };
-
   return (
     <div className="max-w-5xl mx-auto">
       <div className="mb-8">
@@ -145,48 +139,42 @@ export default function SheinStockPage() {
         </p>
       </div>
 
-      {!warehouseFallback && (
-        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {warehouseStatus === "loading" ? (
-                <svg className="w-5 h-5 animate-spin text-blue-600" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-              ) : warehouseStatus === "error" ? (
-                <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-              ) : (
-                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              )}
-              <div>
-                <div className={`text-sm font-medium ${t.t1}`}>
-                  {warehouseStatus === "loading" && "Checking warehouse data..."}
-                  {warehouseStatus === "ready" && `Warehouse data ready — ${warehouseSkuCount.toLocaleString()} SKUs`}
-                  {warehouseStatus === "error" && "Warehouse DB empty — sync required"}
-                </div>
-                <div className={`text-xs ${t.t3}`}>
-                  {warehouseStatus === "loading" && "Please wait..."}
-                  {warehouseStatus === "ready" && "Synced from Feishu. Go to Warehouse Management to re-sync."}
-                  {warehouseStatus === "error" && "Go to Warehouse Management and click Refresh Dashboard Stats first"}
-                </div>
-              </div>
-            </div>
-            {warehouseStatus === "error" && (
-              <button
-                onClick={useWarehouseFallback}
-                className={`px-4 py-2 ${t.card} border ${t.divider} rounded-lg text-sm font-medium ${t.t2} ${t.btn}`}
-              >
-                Use Manual Upload
-              </button>
-            )}
+      <div
+        className={`mb-6 p-4 rounded-xl border flex items-center gap-3 ${
+          warehouseStatus === "loading"
+            ? "bg-blue-50 border-blue-200"
+            : warehouseStatus === "ready"
+            ? "bg-green-50 border-green-200"
+            : "bg-amber-50 border-amber-200"
+        }`}
+      >
+        {warehouseStatus === "loading" ? (
+          <svg className="w-5 h-5 animate-spin text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+        ) : warehouseStatus === "ready" ? (
+          <svg className="w-5 h-5 text-green-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+        ) : (
+          <svg className="w-5 h-5 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20A10 10 0 0012 2z" />
+          </svg>
+        )}
+        <div>
+          <div className="text-sm font-medium text-gray-800">
+            {warehouseStatus === "loading" && "Checking warehouse data…"}
+            {warehouseStatus === "ready" && `Warehouse DB ready — ${warehouseSkuCount.toLocaleString()} SKUs synced from Feishu`}
+            {warehouseStatus === "error" && "Warehouse DB not synced — upload a warehouse file below (optional)"}
+          </div>
+          <div className="text-xs text-gray-500 mt-0.5">
+            {warehouseStatus === "loading" && "Please wait…"}
+            {warehouseStatus === "ready" && "Stock quantities will be pulled automatically. Go to Warehouse Management to re-sync."}
+            {warehouseStatus === "error" && "You can still process without it — or upload your global warehouse inventory as file 4 below."}
           </div>
         </div>
-      )}
+      </div>
 
       <div className={`${t.card} rounded-xl border ${t.divider} p-6 mb-6`}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -211,15 +199,17 @@ export default function SheinStockPage() {
             label="3. Merchant Stock Export"
             description="Export from SHEIN merchant center"
           />
-          {(warehouseFallback || warehouseStatus === "error") && (
-            <UploadBox
-              file={warehouseFile}
-              setFile={setWarehouseFile}
-              inputRef={warehouseInput}
-              label="4. Warehouse Inventory (Fallback)"
-              description="Global warehouse inventory data"
-            />
-          )}
+          <UploadBox
+            file={warehouseFile}
+            setFile={setWarehouseFile}
+            inputRef={warehouseInput}
+            label={`4. Warehouse Inventory${warehouseStatus === "ready" ? " (auto-loaded ✓)" : " (optional)"}`}
+            description={
+              warehouseStatus === "ready"
+                ? `${warehouseSkuCount.toLocaleString()} SKUs from DB — upload to override`
+                : "Upload your global warehouse inventory to fill stock quantities"
+            }
+          />
         </div>
       </div>
 

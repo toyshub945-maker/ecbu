@@ -1039,8 +1039,19 @@ def upsert_target(req: TargetUpsert, _: dict = Depends(auth.get_current_user)):
     return {"ok": True}
 
 @app.get("/api/dashboard/enhanced")
-def dashboard_enhanced(_: dict = Depends(auth.get_current_user)):
-    """Enhanced dashboard — monthly GMV/orders from TikTok export + targets."""
+def dashboard_enhanced(
+    store_code: Optional[str] = None,
+    _: dict = Depends(auth.get_current_user),
+):
+    """Enhanced dashboard — monthly GMV/orders from TikTok export + targets.
+    Pass store_code to filter to a specific store (TK1/TK2/TK3/TK4).
+    Omit for the all-stores admin view.
+    """
+    return _dashboard_enhanced_impl(store_code)
+
+
+def _dashboard_enhanced_impl(store_code: Optional[str] = None):
+    """Core dashboard implementation."""
     from datetime import date
     today = date.today()
     cur_year, cur_month = today.year, today.month
@@ -1053,66 +1064,96 @@ def dashboard_enhanced(_: dict = Depends(auth.get_current_user)):
     cur_prefix  = f"{cur_year}-{cur_month:02d}"
     prev_prefix = f"{prev_year}-{prev_month:02d}"
 
+    # Build optional store filter clauses
+    sc = store_code.upper() if store_code else None
+    store_filter      = " AND store_code=?" if sc else ""
+    store_params_cur  = [f"{cur_prefix}%",  sc] if sc else [f"{cur_prefix}%"]
+    store_params_prev = [f"{prev_prefix}%", sc] if sc else [f"{prev_prefix}%"]
+    trend_params      = [sc] if sc else []
+
     with db.db_cursor() as cur:
         # This month aggregates from tiktok_export_analytics
-        cur.execute("""
+        cur.execute(f"""
             SELECT
                 SUM(COALESCE(gmv,0))     AS gmv,
                 SUM(COALESCE(orders,0))  AS orders,
                 SUM(COALESCE(impressions,0)) AS impressions,
                 COUNT(DISTINCT product_no) AS product_count
             FROM tiktok_export_analytics
-            WHERE period_start LIKE ?
-        """, (f"{cur_prefix}%",))
+            WHERE period_start LIKE ?{store_filter}
+        """, store_params_cur)
         cur_row = dict(cur.fetchone() or {})
 
-        cur.execute("""
+        cur.execute(f"""
             SELECT SUM(COALESCE(gmv,0)) AS gmv, SUM(COALESCE(orders,0)) AS orders
-            FROM tiktok_export_analytics WHERE period_start LIKE ?
-        """, (f"{prev_prefix}%",))
+            FROM tiktok_export_analytics
+            WHERE period_start LIKE ?{store_filter}
+        """, store_params_prev)
         prev_row = dict(cur.fetchone() or {})
 
-        # Per-store this month
-        cur.execute("""
+        # Per-store this month (only relevant for admin / multi-store view)
+        cur.execute(f"""
             SELECT store_code,
                    SUM(COALESCE(gmv,0)) AS gmv,
                    SUM(COALESCE(orders,0)) AS orders,
                    COUNT(DISTINCT product_no) AS products
-            FROM tiktok_export_analytics WHERE period_start LIKE ?
+            FROM tiktok_export_analytics
+            WHERE period_start LIKE ?{store_filter}
             GROUP BY store_code
-        """, (f"{cur_prefix}%",))
+        """, store_params_cur)
         store_month = [dict(r) for r in cur.fetchall()]
 
-        # Monthly trend — last 6 months (one row per month, sum all stores)
-        cur.execute("""
+        # Monthly trend — last 6 months
+        cur.execute(f"""
             SELECT strftime('%Y-%m', period_start) AS ym,
                    SUM(COALESCE(gmv,0)) AS gmv,
                    SUM(COALESCE(orders,0)) AS orders,
                    SUM(COALESCE(impressions,0)) AS impressions
             FROM tiktok_export_analytics
+            {"WHERE store_code=?" if sc else ""}
             GROUP BY ym ORDER BY ym DESC LIMIT 6
-        """)
+        """, trend_params)
         trend_rows = [dict(r) for r in cur.fetchall()]
         trend_rows.reverse()
 
-        # Current month target
-        cur.execute("SELECT * FROM monthly_targets WHERE year=? AND month=?", (cur_year, cur_month))
+        # Current month target — always global (no per-store targets yet)
+        cur.execute(
+            "SELECT * FROM monthly_targets WHERE year=? AND month=?",
+            (cur_year, cur_month),
+        )
         target_row = cur.fetchone()
         target = dict(target_row) if target_row else None
 
-        # Task counts
-        cur.execute("SELECT status, COUNT(*) AS cnt FROM product_tasks GROUP BY status")
+        # Task counts (store-filtered via store_code on users join)
+        if sc:
+            cur.execute("""
+                SELECT t.status, COUNT(*) AS cnt
+                FROM product_tasks t
+                LEFT JOIN users u ON t.assigned_to=u.id
+                WHERE t.store_code=?
+                GROUP BY t.status
+            """, (sc,))
+        else:
+            cur.execute("SELECT status, COUNT(*) AS cnt FROM product_tasks GROUP BY status")
         task_counts = {r["status"]: r["cnt"] for r in cur.fetchall()}
 
         # Team progress
-        cur.execute("""
-            SELECT u.name, u.store_code, COUNT(*) AS done_count
-            FROM product_tasks t JOIN users u ON t.assigned_to=u.id
-            WHERE t.status='done' GROUP BY u.id ORDER BY done_count DESC LIMIT 8
-        """)
+        if sc:
+            cur.execute("""
+                SELECT u.name, u.store_code, COUNT(*) AS done_count
+                FROM product_tasks t JOIN users u ON t.assigned_to=u.id
+                WHERE t.status='done' AND t.store_code=?
+                GROUP BY u.id ORDER BY done_count DESC LIMIT 8
+            """, (sc,))
+        else:
+            cur.execute("""
+                SELECT u.name, u.store_code, COUNT(*) AS done_count
+                FROM product_tasks t JOIN users u ON t.assigned_to=u.id
+                WHERE t.status='done' GROUP BY u.id ORDER BY done_count DESC LIMIT 8
+            """)
         team_progress = [dict(r) for r in cur.fetchall()]
 
-        # Total products
+        # Total products (always global — products belong to all stores)
         cur.execute("SELECT COUNT(*) FROM products")
         total_products = cur.fetchone()[0]
 
@@ -3084,6 +3125,64 @@ async def stock_prediction_export(req: PredictionExportRequest):
         content=xlsx,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=stock_prediction.xlsx"},
+    )
+
+
+# ─── Stock Prediction – Generate Template ────────────────────────────────────
+
+class GenerateTemplateRequest(BaseModel):
+    product_no: str
+    daily_prediction: float = 60
+    prediction_days: int = 90
+    months: list[MonthAllocation] = []
+    upload_ids: list[int] = []  # ERP upload IDs to pull SKU orders from; empty = all
+
+
+@app.post("/api/stock-prediction/generate-template")
+async def stock_prediction_generate_template(req: GenerateTemplateRequest):
+    """
+    Pull SKUs for a product from ERP orders DB, enrich with warehouse/pricing/R&R data,
+    then fill and return the 'Template prediction.xlsx' layout.
+    """
+    from fastapi.responses import Response
+
+    uid_list = req.upload_ids if req.upload_ids else None
+    skus = erp.get_skus_for_product(req.product_no, uid_list)
+
+    if not skus:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No SKU orders found for product '{req.product_no}'. "
+                   "Make sure ERP files have been uploaded and this product number matches.",
+        )
+
+    # Grand total across ALL products (not just this product) for accurate quota rate
+    # Re-use get_sku_summary to get the full grand total
+    summary = erp.get_sku_summary(uid_list)
+    grand_total = summary["grand_total"]
+
+    months = [{"label": m.label, "pct": m.pct} for m in req.months]
+    # Default months if none provided
+    if not months:
+        months = [
+            {"label": "Sep", "pct": 30},
+            {"label": "Oct", "pct": 35},
+            {"label": "Nov", "pct": 40},
+        ]
+
+    xlsx = sp.generate_template_excel(
+        product_no=req.product_no,
+        skus=skus,
+        months=months,
+        daily_prediction=req.daily_prediction,
+        prediction_days=req.prediction_days,
+        grand_total=grand_total,
+    )
+    safe_name = req.product_no.replace("/", "-").replace("\\", "-")
+    return Response(
+        content=xlsx,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="prediction_{safe_name}.xlsx"'},
     )
 
 

@@ -365,11 +365,13 @@ CREATE TABLE IF NOT EXISTS erp_sku_orders (
     upload_id    INTEGER NOT NULL REFERENCES erp_order_uploads(id) ON DELETE CASCADE,
     sku          TEXT NOT NULL,
     base_sku     TEXT,
+    msku         TEXT,
     product_no   TEXT,
     tt1_orders   INTEGER DEFAULT 0,
     tt2_orders   INTEGER DEFAULT 0,
     tt3_orders   INTEGER DEFAULT 0,
     tt4_orders   INTEGER DEFAULT 0,
+    shein_orders INTEGER DEFAULT 0,
     other_orders INTEGER DEFAULT 0,
     total_orders INTEGER DEFAULT 0
 );
@@ -470,11 +472,15 @@ def init_db(db_path: str | None = None) -> None:
             """CREATE TABLE IF NOT EXISTS erp_sku_orders (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 upload_id INTEGER NOT NULL REFERENCES erp_order_uploads(id) ON DELETE CASCADE,
-                sku TEXT NOT NULL, base_sku TEXT, product_no TEXT,
+                sku TEXT NOT NULL, base_sku TEXT, msku TEXT, product_no TEXT,
                 tt1_orders INTEGER DEFAULT 0, tt2_orders INTEGER DEFAULT 0,
                 tt3_orders INTEGER DEFAULT 0, tt4_orders INTEGER DEFAULT 0,
-                other_orders INTEGER DEFAULT 0, total_orders INTEGER DEFAULT 0
+                shein_orders INTEGER DEFAULT 0, other_orders INTEGER DEFAULT 0,
+                total_orders INTEGER DEFAULT 0
             )""",
+            "ALTER TABLE erp_sku_orders ADD COLUMN msku TEXT",
+            "ALTER TABLE erp_sku_orders ADD COLUMN shein_orders INTEGER DEFAULT 0",
+            "ALTER TABLE monthly_targets ADD COLUMN store_code TEXT",
         ]
         for sql in migrations:
             try:

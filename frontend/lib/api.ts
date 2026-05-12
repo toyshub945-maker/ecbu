@@ -260,7 +260,8 @@ export const api = {
   getTargets: () => request<{ targets: any[] }>("/targets"),
   upsertTarget: (data: { year: number; month: number; target_gmv?: number | null; target_orders?: number | null; target_products?: number | null; notes?: string | null }) =>
     request<{ ok: boolean }>("/targets", { method: "PUT", body: JSON.stringify(data) }),
-  dashboardEnhanced: () => request<any>("/dashboard/enhanced"),
+  dashboardEnhanced: (store_code?: string) =>
+    request<any>(`/dashboard/enhanced${store_code ? `?store_code=${encodeURIComponent(store_code)}` : ""}`),
 
   // Product Manager
   pmProducts: (q?: string) =>

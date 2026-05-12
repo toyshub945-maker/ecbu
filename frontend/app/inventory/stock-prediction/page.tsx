@@ -13,10 +13,13 @@ function backendUrl(path: string) {
 type SkuRow = {
   product_no: string;
   sku: string;
+  msku?: string;
   tt1_orders: number;
   tt2_orders: number;
   tt3_orders: number;
   tt4_orders: number;
+  shein_orders?: number;
+  other_orders?: number;
   total_orders: number;
   current_stock: number;
   sku_quota_rate: number;
@@ -91,6 +94,172 @@ function fmtNum(n: number, dec = 1) {
   if (n === 0) return "0";
   return n.toFixed(dec).replace(/\.0$/, "");
 }
+
+// ─── Generate Template Panel ──────────────────────────────────────────────────
+
+function GenerateTemplatePanel({
+  dailyPrediction,
+  predictionDays,
+  months,
+  erpUploads,
+  t,
+}: {
+  dailyPrediction: number;
+  predictionDays: number;
+  months: MonthAllocation[];
+  erpUploads: ErpUpload[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  t: any;
+}) {
+  const [productNo, setProductNo] = useState("");
+  const [useAllUploads, setUseAllUploads] = useState(true);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
+  const [genSuccess, setGenSuccess] = useState(false);
+
+  async function handleGenerate() {
+    if (!productNo.trim()) { setGenError("Please enter a product number"); return; }
+    setGenerating(true);
+    setGenError(null);
+    setGenSuccess(false);
+    try {
+      const upload_ids = useAllUploads ? [] : [...selectedIds];
+      const res = await fetch(backendUrl("/api/stock-prediction/generate-template"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          product_no: productNo.trim(),
+          daily_prediction: dailyPrediction,
+          prediction_days: predictionDays,
+          months: months.map(m => ({ label: m.label, pct: m.pct })),
+          upload_ids,
+        }),
+      });
+      if (!res.ok) {
+        const e = await res.json();
+        throw new Error(e.detail || "Generation failed");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `prediction_${productNo.trim()}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setGenSuccess(true);
+      setTimeout(() => setGenSuccess(false), 3000);
+    } catch (e: unknown) {
+      setGenError(e instanceof Error ? e.message : "Generation failed");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  return (
+    <div className={`${t.card} rounded-xl border ${t.divider} p-4 space-y-3`}>
+      <h3 className={`text-sm font-bold ${t.t1} flex items-center gap-2`}>
+        <span>📋</span> Generate Template
+      </h3>
+      <p className={`text-[10px] ${t.t4}`}>
+        Enter a product number to generate a filled prediction template Excel (matches the exact template format).
+      </p>
+
+      <div>
+        <label className={`text-xs font-medium ${t.t3} block mb-1`}>Product Number</label>
+        <input
+          type="text"
+          placeholder="e.g. 217"
+          value={productNo}
+          onChange={e => setProductNo(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") handleGenerate(); }}
+          className={`w-full px-3 py-2 rounded-lg border ${t.divider} ${t.card} ${t.t1} text-sm focus:outline-none focus:ring-2 focus:ring-amber-500`}
+        />
+      </div>
+
+      {/* ERP source selector */}
+      {erpUploads.length > 0 && (
+        <div className="space-y-1.5">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={useAllUploads}
+              onChange={e => setUseAllUploads(e.target.checked)}
+              className="rounded"
+            />
+            <span className={`text-xs ${t.t3}`}>Use all ERP uploads</span>
+          </label>
+          {!useAllUploads && (
+            <div className="space-y-1 pl-1 max-h-32 overflow-y-auto">
+              {erpUploads.map(u => (
+                <label key={u.id} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(u.id)}
+                    onChange={e => {
+                      setSelectedIds(prev => {
+                        const n = new Set(prev);
+                        if (e.target.checked) n.add(u.id); else n.delete(u.id);
+                        return n;
+                      });
+                    }}
+                    className="rounded"
+                  />
+                  <span className={`text-[11px] ${t.t2} truncate`}>{u.period_label}</span>
+                  <span className={`text-[10px] ${t.t4} shrink-0`}>{u.sku_count} SKUs</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {genError && (
+        <div className="p-2 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs">
+          {genError}
+        </div>
+      )}
+      {genSuccess && (
+        <div className="p-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-xs font-medium">
+          ✅ Template downloaded!
+        </div>
+      )}
+
+      <button
+        onClick={handleGenerate}
+        disabled={generating || !productNo.trim()}
+        className={`w-full py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+          productNo.trim() && !generating
+            ? "bg-amber-500 hover:bg-amber-600 text-white shadow-md"
+            : `${t.page} ${t.t4} cursor-not-allowed border ${t.divider}`
+        }`}
+      >
+        {generating ? (
+          <>
+            <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+            </svg>
+            Generating…
+          </>
+        ) : (
+          <>
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+            </svg>
+            Generate & Download
+          </>
+        )}
+      </button>
+
+      <div className={`text-[9px] ${t.t5} leading-relaxed`}>
+        Uses current daily prediction ({dailyPrediction}/day), {predictionDays} days,
+        and {months.length} month allocations. Data pulled from ERP orders DB + Warehouse + Products.
+      </div>
+    </div>
+  );
+}
+
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
@@ -554,6 +723,7 @@ export default function StockPredictionPage() {
                     const wh = parsedData.skus.filter(s => s.stock_source === "warehouse_db").length;
                     const pr = parsedData.skus.filter(s => s.price_source === "products_db").length;
                     const mg = parsedData.skus.filter(s => s.margin_source === "pricing_db").length;
+                    const rr = parsedData.skus.filter(s => s.rr_source === "rr_db").length;
                     return (
                       <>
                         <div className="flex items-center gap-1.5">
@@ -569,8 +739,8 @@ export default function StockPredictionPage() {
                           <span>Profit Margin: {mg > 0 ? `${mg} SKUs from Pricing tab` : "from Excel"}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-orange-400"/>
-                          <span>R&R Rate: from Excel</span>
+                          <span className={`w-2 h-2 rounded-full ${rr > 0 ? "bg-emerald-500" : "bg-gray-400"}`}/>
+                          <span>R&R Rate: {rr > 0 ? `${rr} SKUs from R&R tab` : "from Excel"}</span>
                         </div>
                       </>
                     );
@@ -685,6 +855,16 @@ export default function StockPredictionPage() {
               Month = Expected × %
             </div>
           </div>
+
+          {/* ── Generate Template ───────────────────────────────────────────── */}
+          <GenerateTemplatePanel
+            dailyPrediction={dailyPrediction}
+            predictionDays={predictionDays}
+            months={months}
+            erpUploads={erpUploads}
+            t={t}
+          />
+
         </div>
 
         {/* ── RIGHT: Results Table ─────────────────────────────────────────── */}
@@ -773,9 +953,13 @@ export default function StockPredictionPage() {
                             <th className={`px-3 py-2.5 text-right font-semibold ${t.t2}`}>TT2</th>
                             <th className={`px-3 py-2.5 text-right font-semibold ${t.t2}`}>TT3</th>
                             <th className={`px-3 py-2.5 text-right font-semibold ${t.t2}`}>TT4</th>
+                            <th className={`px-3 py-2.5 text-right font-semibold`} style={{ color: "#e11d48" }}>Shein</th>
                           </>
                         )}
-                        <th className={`px-3 py-2.5 text-right font-semibold ${t.t2}`}>Total Orders</th>
+                        <th className={`px-3 py-2.5 text-right font-semibold ${t.t2} whitespace-nowrap`}>
+                          All Stores
+                          <span className="ml-1 text-[9px] font-normal opacity-60">total</span>
+                        </th>
                         <th className={`px-3 py-2.5 text-right font-semibold ${t.t2}`}>Quota %</th>
                         <th className={`px-3 py-2.5 text-right font-semibold ${t.t2} whitespace-nowrap`}>
                           Now Stock
@@ -847,6 +1031,9 @@ export default function StockPredictionPage() {
                                 <td className={`px-3 py-2 text-right font-semibold ${t.t2}`}>
                                   {prodSkus.reduce((s, r) => s + r.tt4_orders, 0).toLocaleString()}
                                 </td>
+                                <td className="px-3 py-2 text-right font-semibold" style={{ color: "#e11d48" }}>
+                                  {prodSkus.reduce((s, r) => s + (r.shein_orders ?? 0), 0) || "—"}
+                                </td>
                               </>
                             )}
                             <td className={`px-3 py-2 text-right font-bold ${t.t1}`}>
@@ -901,10 +1088,13 @@ export default function StockPredictionPage() {
                                 </td>
                                 {showTTCols && (
                                   <>
-                                    <td className={`px-3 py-2 text-right ${t.t3}`}>{sku.tt1_orders || "-"}</td>
-                                    <td className={`px-3 py-2 text-right ${t.t3}`}>{sku.tt2_orders || "-"}</td>
-                                    <td className={`px-3 py-2 text-right ${t.t3}`}>{sku.tt3_orders || "-"}</td>
-                                    <td className={`px-3 py-2 text-right ${t.t3}`}>{sku.tt4_orders || "-"}</td>
+                                    <td className={`px-3 py-2 text-right ${t.t3}`}>{sku.tt1_orders || "—"}</td>
+                                    <td className={`px-3 py-2 text-right ${t.t3}`}>{sku.tt2_orders || "—"}</td>
+                                    <td className={`px-3 py-2 text-right ${t.t3}`}>{sku.tt3_orders || "—"}</td>
+                                    <td className={`px-3 py-2 text-right ${t.t3}`}>{sku.tt4_orders || "—"}</td>
+                                    <td className="px-3 py-2 text-right font-medium" style={{ color: "#e11d48" }}>
+                                      {(sku.shein_orders ?? 0) > 0 ? sku.shein_orders : "—"}
+                                    </td>
                                   </>
                                 )}
                                 <td className={`px-3 py-2 text-right font-medium ${t.t1}`}>
@@ -978,6 +1168,9 @@ export default function StockPredictionPage() {
                             </td>
                             <td className={`px-3 py-2.5 text-right ${t.t1}`}>
                               {filteredSkus.reduce((s, r) => s + r.tt4_orders, 0).toLocaleString()}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-bold" style={{ color: "#e11d48" }}>
+                              {filteredSkus.reduce((s, r) => s + (r.shein_orders ?? 0), 0).toLocaleString()}
                             </td>
                           </>
                         )}

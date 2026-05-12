@@ -250,14 +250,24 @@ export default function DashboardPage() {
   const [syncing, setSyncing]   = useState(false);
   const [syncMsg, setSyncMsg]   = useState("");
   const [showTarget, setShowTarget] = useState(false);
+  const [adminStoreFilter, setAdminStoreFilter] = useState<string>(""); // "" = all stores
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (storeOverride?: string) => {
     try {
-      const [r, u] = await Promise.all([api.dashboardEnhanced(), api.users()]);
+      const u2 = typeof window !== "undefined"
+        ? (() => { try { return JSON.parse(localStorage.getItem("user") || "{}"); } catch { return {}; } })()
+        : {};
+      // Non-admin: always filter to their own store
+      // Admin: use the adminStoreFilter dropdown (empty = all)
+      const filterStore = u2.role !== "admin"
+        ? (u2.store_code || undefined)
+        : (storeOverride !== undefined ? storeOverride : adminStoreFilter) || undefined;
+      const [r, u] = await Promise.all([api.dashboardEnhanced(filterStore || undefined), api.users()]);
       setData(r); setUsers(u.users || []);
     } catch { /* fallback */ }
     finally { setLoading(false); }
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminStoreFilter]);
 
   useEffect(() => {
     if (!localStorage.getItem("token")) { router.replace("/login"); return; }
@@ -279,6 +289,14 @@ export default function DashboardPage() {
   const user = typeof window !== "undefined"
     ? (() => { try { return JSON.parse(localStorage.getItem("user")||"{}"); } catch { return {}; } })()
     : {};
+  const isAdmin   = user?.role === "admin";
+  const userStore = user?.store_code as string | undefined;         // e.g. "TK1"
+  // Which store are we actually viewing?
+  const activeStore = isAdmin ? (adminStoreFilter || undefined) : (userStore || undefined);
+  const storeName   = activeStore ? (STORE_NAMES[activeStore] || activeStore) : null;
+  const viewLabel   = storeName
+    ? `${activeStore} · ${storeName}`
+    : "EC BU1 Overview";
 
   return (
     <>
@@ -296,13 +314,26 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className={`text-2xl font-black ${t.t1}`}>Dashboard</h1>
-              <p className={`text-sm ${t.t4} mt-0.5`}>{data?.month?.label || "Loading…"} · EC BU1 Overview</p>
+              <p className={`text-sm ${t.t4} mt-0.5`}>{data?.month?.label || "Loading…"} · {viewLabel}</p>
             </div>
             <div className="flex items-center gap-2">
               {syncMsg && (
                 <span className={`text-xs px-3 py-1.5 rounded-xl border font-medium ${
                   syncMsg.startsWith("✓") ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-red-500/10 text-red-400 border-red-500/20"
                 }`}>{syncMsg}</span>
+              )}
+              {/* Admin store filter */}
+              {isAdmin && (
+                <select
+                  value={adminStoreFilter}
+                  onChange={e => { setAdminStoreFilter(e.target.value); load(e.target.value); }}
+                  className={`text-sm font-semibold px-3 py-2 rounded-xl border ${t.inp} ${t.divider} focus:outline-none focus:ring-2 focus:ring-purple-500/30`}
+                >
+                  <option value="">🏪 All Stores</option>
+                  {Object.entries(STORE_NAMES).map(([code, name]) => (
+                    <option key={code} value={code}>{code} · {name}</option>
+                  ))}
+                </select>
               )}
               <button onClick={()=>setShowTarget(true)}
                 className={`flex items-center gap-1.5 px-3 py-2 ${t.btnAlt} text-sm font-semibold rounded-xl transition-all`}>
@@ -352,7 +383,7 @@ export default function DashboardPage() {
                   <div className="relative">
                     <div className={`${t.greetSub} text-xs font-semibold uppercase tracking-wider mb-1`}>Welcome back</div>
                     <div className="text-white font-black text-xl mb-1">{user?.name || "Team"} 👋</div>
-                    <div className={`${t.greetSub} text-sm mb-4`}>EC BU1 · {data?.month?.label}</div>
+                    <div className={`${t.greetSub} text-sm mb-4`}>{viewLabel} · {data?.month?.label}</div>
                     <div className="flex items-end gap-3">
                       <div>
                         <div className={`text-[10px] ${t.greetSub} uppercase tracking-wider`}>This Month GMV</div>
@@ -484,7 +515,7 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h2 className={`${t.t1} font-black text-base`}>📈 Monthly GMV Trend</h2>
-                    <p className={`${t.t4} text-xs mt-0.5`}>Last 6 months · all stores combined</p>
+                    <p className={`${t.t4} text-xs mt-0.5`}>Last 6 months · {storeName ? `${userStore} – ${storeName}` : "all stores combined"}</p>
                   </div>
                 </div>
                 {data?.trend?.length > 0 ? (
@@ -521,7 +552,9 @@ export default function DashboardPage() {
               {/* ── Store Performance + Team Progress ─────────────── */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className={`${t.card} rounded-3xl p-5`}>
-                  <h2 className={`${t.t1} font-black text-base mb-4`}>🏪 Store Performance</h2>
+                  <h2 className={`${t.t1} font-black text-base mb-4`}>
+                    🏪 {storeName ? `${activeStore} Performance` : "Store Performance"}
+                  </h2>
                   {!data?.store_month?.length ? (
                     <div className={`flex flex-col items-center justify-center h-28 ${t.t5} text-sm gap-2`}>
                       <span className="text-2xl">📊</span><span>No data for this month yet</span>
