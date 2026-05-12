@@ -249,7 +249,7 @@ function ChartSection({ monthly, t }: { monthly: PMDetail["monthly"]; t: ThemeDe
   ] as const;
 
   const activeTab = TABS.find(x => x.key === tab)!;
-  const useBars = data.length < 3;
+  const useBars = data.length <= 1;
   const gridColor = themeKey !== "light" ? "#334155" : "#e5e7eb";
   const tickFill = themeKey !== "light" ? "#64748b" : "#9ca3af";
 
@@ -290,8 +290,8 @@ function ChartSection({ monthly, t }: { monthly: PMDetail["monthly"]; t: ThemeDe
                 <XAxis dataKey="label" tick={{fontSize:10,fill:tickFill}} axisLine={false} tickLine={false}/>
                 <YAxis tick={{fontSize:10,fill:tickFill}} axisLine={false} tickLine={false}/>
                 <Tooltip content={<CustomTooltip />}/>
-                <Bar dataKey="impressions" name="Impressions" fill="#2563eb" radius={[4,4,0,0]} />
-                <Bar dataKey="clicks" name="Clicks" fill="#f59e0b" radius={[4,4,0,0]} />
+                <Bar dataKey="impressions" name="Impressions" fill="#2563eb" radius={[4,4,0,0]} maxBarSize={60}/>
+                <Bar dataKey="clicks" name="Clicks" fill="#f59e0b" radius={[4,4,0,0]} maxBarSize={60}/>
               </BarChart>
             ) : (
               <ComposedChart data={data} margin={{top:4,right:4,left:-20,bottom:0}}>
@@ -319,7 +319,7 @@ function ChartSection({ monthly, t }: { monthly: PMDetail["monthly"]; t: ThemeDe
               <XAxis dataKey="label" tick={{fontSize:10,fill:tickFill}} axisLine={false} tickLine={false}/>
               <YAxis tick={{fontSize:10,fill:tickFill}} axisLine={false} tickLine={false}/>
               <Tooltip content={<CustomTooltip prefix={tab==="gmv"?"$":""} />}/>
-              <Bar dataKey={tab} name={tab.charAt(0).toUpperCase()+tab.slice(1)} radius={[6,6,0,0]}>
+              <Bar dataKey={tab} name={tab.charAt(0).toUpperCase()+tab.slice(1)} radius={[6,6,0,0]} maxBarSize={80}>
                 {data.map((_, i) => <Cell key={i} fill={activeTab.color}/>)}
               </Bar>
             </BarChart>
