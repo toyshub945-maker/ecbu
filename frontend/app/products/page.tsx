@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, Cell, ComposedChart,
+  BarChart, Bar, Cell, ComposedChart, Line,
 } from "recharts";
 import { api } from "@/lib/api";
 import type { PMProduct, PMDetail, PerfTier } from "@/lib/types";
@@ -42,14 +42,19 @@ function CustomTooltip({ active, payload, label, prefix = "" }: any) {
   return (
     <div className={`${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"} rounded-xl px-3 py-2 shadow-lg text-xs border`}>
       <p className={`${isDark ? "text-slate-400" : "text-gray-500"} mb-1.5 font-medium`}>{label}</p>
-      {payload.map((p: any) => (
-        <div key={p.dataKey} className="flex items-center gap-2 py-0.5">
-          <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
-          <span className={isDark ? "text-slate-300" : "text-gray-600"}>{p.name}</span>
-          <span className={`font-bold ml-auto pl-4 ${isDark ? "text-white" : "text-gray-900"}`}>{prefix}{fmt(p.value)}</span>
-        </div>
-      ))}
-    </div>  );
+      {payload.map((p: any) => {
+        const isCtr = p.dataKey === "ctr";
+        const displayVal = isCtr ? `${Number(p.value).toFixed(2)}%` : `${prefix}${fmt(p.value)}`;
+        return (
+          <div key={p.dataKey} className="flex items-center gap-2 py-0.5">
+            <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
+            <span className={isDark ? "text-slate-300" : "text-gray-600"}>{p.name}</span>
+            <span className={`font-bold ml-auto pl-4 ${isDark ? "text-white" : "text-gray-900"}`}>{displayVal}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 // ─── Upload Panel ─────────────────────────────────────────────────────────────
@@ -255,11 +260,12 @@ function ChartSection({ monthly, t }: { monthly: PMDetail["monthly"]; t: ThemeDe
 
   return (
     <div>
-      <div className="grid grid-cols-3 gap-3 mb-5">
+      <div className="grid grid-cols-2 gap-3 mb-5">
         {[
           { label:"Total Orders", value: monthly.reduce((s,m)=>s+m.orders,0),      fmt:(v:number)=>v.toLocaleString(),  color:"text-violet-700", bg:"bg-violet-50 border-violet-200" },
           { label:"Total GMV",    value: monthly.reduce((s,m)=>s+m.gmv,0),          fmt:(v:number)=>`$${fmt(v)}`,        color:"text-emerald-700", bg:"bg-emerald-50 border-emerald-200" },
           { label:"Total Impr.",  value: monthly.reduce((s,m)=>s+m.impressions,0),  fmt:(v:number)=>fmt(v),              color:"text-blue-700", bg:"bg-blue-50 border-blue-200" },
+          { label:"Avg CTR",      value: monthly.length ? monthly.reduce((s,m)=>s+m.ctr,0)/monthly.length : 0, fmt:(v:number)=>`${v.toFixed(2)}%`, color:"text-rose-700", bg:"bg-rose-50 border-rose-200" },
         ].map(k => (
           <div key={k.label} className={`rounded-2xl p-3 border ${k.bg}`}>
             <div className={`text-[10px] ${t.t4} uppercase tracking-wider mb-1 font-semibold`}>{k.label}</div>
@@ -285,32 +291,53 @@ function ChartSection({ monthly, t }: { monthly: PMDetail["monthly"]; t: ThemeDe
         <ResponsiveContainer width="100%" height={200}>
           {tab === "traffic" ? (
             useBars ? (
-              <BarChart data={data} margin={{top:4,right:4,left:-20,bottom:0}}>
+              /* Single data point: dual-axis BarChart — Impressions left, Clicks right, CTR hidden */
+              <ComposedChart data={data} margin={{top:4,right:44,left:-20,bottom:0}}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false}/>
                 <XAxis dataKey="label" tick={{fontSize:10,fill:tickFill}} axisLine={false} tickLine={false}/>
-                <YAxis tick={{fontSize:10,fill:tickFill}} axisLine={false} tickLine={false}/>
+                <YAxis yAxisId="imp" orientation="left" tick={{fontSize:9,fill:tickFill}} axisLine={false} tickLine={false} tickFormatter={(v:number)=>fmt(v)}/>
+                <YAxis yAxisId="clk" orientation="right" tick={{fontSize:9,fill:"#f59e0b"}} axisLine={false} tickLine={false}/>
+                <YAxis yAxisId="ctr" orientation="right" hide domain={["auto","auto"]}/>
                 <Tooltip content={<CustomTooltip />}/>
-                <Bar dataKey="impressions" name="Impressions" fill="#2563eb" radius={[4,4,0,0]} maxBarSize={60}/>
-                <Bar dataKey="clicks" name="Clicks" fill="#f59e0b" radius={[4,4,0,0]} maxBarSize={60}/>
-              </BarChart>
+                <Bar yAxisId="imp" dataKey="impressions" name="Impressions" fill="#2563eb" radius={[4,4,0,0]} maxBarSize={60}/>
+                <Bar yAxisId="clk" dataKey="clicks" name="Clicks" fill="#f59e0b" radius={[4,4,0,0]} maxBarSize={60}/>
+                <Line yAxisId="ctr" type="monotone" dataKey="ctr" name="CTR" stroke="#10b981" strokeWidth={2} strokeDasharray="5 3" dot={{fill:"#10b981",r:4,strokeWidth:0}}/>
+              </ComposedChart>
             ) : (
-              <ComposedChart data={data} margin={{top:4,right:4,left:-20,bottom:0}}>
+              /* Dual Y-axis: left=Impressions, right=Clicks; hidden axis for CTR */
+              <ComposedChart data={data} margin={{top:4,right:44,left:-20,bottom:0}}>
                 <defs>
                   <linearGradient id="gImp" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#2563eb" stopOpacity={0.15}/>
+                    <stop offset="5%" stopColor="#2563eb" stopOpacity={0.18}/>
                     <stop offset="95%" stopColor="#2563eb" stopOpacity={0}/>
                   </linearGradient>
                   <linearGradient id="gClk" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.15}/>
+                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.18}/>
                     <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false}/>
                 <XAxis dataKey="label" tick={{fontSize:10,fill:tickFill}} axisLine={false} tickLine={false}/>
-                <YAxis tick={{fontSize:10,fill:tickFill}} axisLine={false} tickLine={false}/>
+                {/* Left axis — Impressions (large scale) */}
+                <YAxis yAxisId="imp" orientation="left"
+                  tick={{fontSize:9,fill:tickFill}} axisLine={false} tickLine={false}
+                  tickFormatter={(v:number)=>fmt(v)}/>
+                {/* Right axis — Clicks (small scale) */}
+                <YAxis yAxisId="clk" orientation="right"
+                  tick={{fontSize:9,fill:"#f59e0b"}} axisLine={false} tickLine={false}/>
+                {/* Hidden axis — CTR % (its own scale so it's always visible) */}
+                <YAxis yAxisId="ctr" orientation="right" hide domain={["auto","auto"]}/>
                 <Tooltip content={<CustomTooltip />}/>
-                <Area type="monotone" dataKey="impressions" name="Impressions" stroke="#2563eb" strokeWidth={2} fill="url(#gImp)" dot={{fill:"#2563eb",r:3,strokeWidth:0}}/>
-                <Area type="monotone" dataKey="clicks" name="Clicks" stroke="#f59e0b" strokeWidth={2} fill="url(#gClk)" dot={{fill:"#f59e0b",r:3,strokeWidth:0}}/>
+                <Area yAxisId="imp" type="monotone" dataKey="impressions" name="Impressions"
+                  stroke="#2563eb" strokeWidth={2} fill="url(#gImp)"
+                  dot={{fill:"#2563eb",r:3,strokeWidth:0}}/>
+                <Area yAxisId="clk" type="monotone" dataKey="clicks" name="Clicks"
+                  stroke="#f59e0b" strokeWidth={2} fill="url(#gClk)"
+                  dot={{fill:"#f59e0b",r:3,strokeWidth:0}}/>
+                <Line yAxisId="ctr" type="monotone" dataKey="ctr" name="CTR"
+                  stroke="#10b981" strokeWidth={2} strokeDasharray="5 3"
+                  dot={{fill:"#10b981",r:3,strokeWidth:0}}
+                  activeDot={{r:5,fill:"#10b981",stroke:"#fff",strokeWidth:2}}/>
               </ComposedChart>
             )
           ) : useBars ? (
