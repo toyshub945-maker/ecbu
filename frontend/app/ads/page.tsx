@@ -91,8 +91,7 @@ function getAdCostRateCellStyle(rate: number): React.CSSProperties {
   if (r < 6)   return { backgroundColor: "#4CAF50", color: "#fff" };    // <6%   → green
   if (r < 7)   return { backgroundColor: "#FFE0B2", color: "#BF360C" }; // 6–6.9% → light peach
   if (r < 8)   return { backgroundColor: "#FFCC80", color: "#E65100" }; // 7–7.9% → peach-orange
-  if (r < 9)   return { backgroundColor: "#FFA726", color: "#fff" };    // 8–8.9% → amber
-  if (r < 10)  return { backgroundColor: "#FF7043", color: "#fff" };    // 9–9.9% → orange-red
+  if (r < 10)  return { backgroundColor: "#FFA726", color: "#fff" };    // 8–9.9% → amber
   return        { backgroundColor: "#F44336", color: "#fff" };           // ≥10%   → red
 }
 
@@ -876,8 +875,7 @@ export default function AdsPage() {
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{background:"#4CAF50"}}></span> &lt;6%</span>
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{background:"#FFE0B2"}}></span> 6–6.9%</span>
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{background:"#FFCC80"}}></span> 7–7.9%</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{background:"#FFA726"}}></span> 8–8.9%</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{background:"#FF7043"}}></span> 9–9.9%</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{background:"#FFA726"}}></span> 8–9.9%</span>
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{background:"#F44336"}}></span> ≥10%</span>
         </div>
       </div>
