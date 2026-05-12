@@ -1116,7 +1116,10 @@ function AdsCreativeTab() {
     if (rows.length === 0) return;
     const headers = ["Product #","Warehouse","Video ID","Creator","Video Title","Cost","Orders","Cost/Order","Revenue","ROI","CTR","Status"];
     const lines = rows.map(e => [
-      e.product_no, e.warehouse_name || "", e.video_id || "", e.tiktok_account || "",
+      e.product_no, e.warehouse_name || "",
+      // Wrap Video ID with ="..." so Excel displays the full 18-digit ID instead of scientific notation
+      e.video_id ? `="${e.video_id}"` : "",
+      e.tiktok_account || "",
       `"${(e.video_title || "").replace(/"/g, '""')}"`,
       e.cost.toFixed(2), e.sku_orders, e.cost_per_order > 0 ? e.cost_per_order.toFixed(2) : "",
       e.gross_revenue.toFixed(2), e.roi > 0 ? e.roi.toFixed(1) : "",
