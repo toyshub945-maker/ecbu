@@ -143,7 +143,7 @@ def run_automation(msku_mapping_path, inventory_path, template_path, output_path
         if not msku_map:
             df_msku = pd.read_excel(msku_mapping_path, sheet_name=0, engine="openpyxl")
             cols = [str(c).strip() for c in df_msku.columns]
-            if len(cols) > 3:
+            if len(cols) > 4:
                 m_col, w_col = cols[3], cols[4]
                 for _, row in df_msku.iterrows():
                     m = normalize_sku(row[m_col])
@@ -276,9 +276,13 @@ def run_automation(msku_mapping_path, inventory_path, template_path, output_path
     # ── Step 3: Update TikTok Template with openpyxl (cross-platform, no Excel needed) ──
     logs.append("[Step 3] Updating TikTok Template (openpyxl)")
 
+    current_step = "loading workbook"
     try:
         wb = _load_workbook_safe(template_path)
+        if not wb.worksheets:
+            raise Exception("Template has no worksheets after loading.")
         ws = wb.worksheets[0]
+        logs.append(f"  Loaded sheet '{ws.title}' (max_row={ws.max_row}, max_col={ws.max_column})")
 
         # Disable sheet protection if set
         try:
@@ -291,11 +295,16 @@ def run_automation(msku_mapping_path, inventory_path, template_path, output_path
         col_map = {}
         excluded_cols = []
 
-        # Find the row containing "Seller SKU" — wide scan
+        current_step = "scanning for Seller SKU header"
+        # Find the row containing "Seller SKU" — wide scan, bounded by actual sheet size
+        scan_max_col = min(100, max(ws.max_column, 30))
         for r in range(2, 11):
             found_sku = False
-            for c in range(1, 100):
-                val = str(_get_cell_value(ws, r, c) or "").strip().lower()
+            for c in range(1, scan_max_col + 1):
+                try:
+                    val = str(_get_cell_value(ws, r, c) or "").strip().lower()
+                except Exception:
+                    continue
                 if "seller sku" in val or "seller_sku" in val or "商家sku" in val:
                     found_sku = True
                     col_map["Seller SKU"] = c
@@ -309,10 +318,14 @@ def run_automation(msku_mapping_path, inventory_path, template_path, output_path
             logs.append("  WARNING: 'Seller SKU' not found by label. Falling back to Column 15.")
             col_map["Seller SKU"] = 15
 
+        current_step = "scanning warehouse columns"
         # Scan AROUND the header row for warehouse columns (rows header-2 to header+2)
         for r in range(max(1, header_row - 2), min(11, header_row + 3)):
-            for c in range(1, 100):
-                lbl = str(_get_cell_value(ws, r, c) or "").strip()
+            for c in range(1, scan_max_col + 1):
+                try:
+                    lbl = str(_get_cell_value(ws, r, c) or "").strip()
+                except Exception:
+                    continue
                 if not lbl:
                     continue
 
@@ -341,13 +354,17 @@ def run_automation(msku_mapping_path, inventory_path, template_path, output_path
         if "Seller SKU" not in col_map:
             raise Exception("Template missing 'Seller SKU' column.")
 
-        max_row = ws.max_row
+        current_step = "computing data start row"
+        max_row = ws.max_row or 0
         sku_col_idx = col_map["Seller SKU"]
         data_start_row = header_row + 1
 
         # Skip instruction/label rows (mandatory, optional, etc.)
         for r in range(header_row + 1, min(header_row + 15, max_row + 1)):
-            cell_val = str(_get_cell_value(ws, r, sku_col_idx) or "").strip().lower()
+            try:
+                cell_val = str(_get_cell_value(ws, r, sku_col_idx) or "").strip().lower()
+            except Exception:
+                cell_val = ""
             if cell_val in ("mandatory", "optional", "uneditable", "必填", "选填") or not cell_val:
                 data_start_row = r + 1
                 continue
@@ -357,17 +374,23 @@ def run_automation(msku_mapping_path, inventory_path, template_path, output_path
 
         logs.append(f"  Data starts at row: {data_start_row}, total rows: {max_row}")
 
+        current_step = "reading MSKU list from template"
         # Read MSKU list from template
         msku_list = []
-        for r in range(data_start_row, max_row + 1):
-            val = str(_get_cell_value(ws, r, sku_col_idx) or "").strip().upper()
-            msku_list.append(val)
+        if max_row >= data_start_row:
+            for r in range(data_start_row, max_row + 1):
+                try:
+                    val = str(_get_cell_value(ws, r, sku_col_idx) or "").strip().upper()
+                except Exception:
+                    val = ""
+                msku_list.append(val)
 
         logs.append(f"  Fetched {len(msku_list)} MSKUs from template")
 
         target_groups = [g for g in col_map.keys() if g != "Seller SKU"]
         target_debug_ids = ["441", "446", "463", "445", "302"]
 
+        current_step = "writing stock values to template"
         updated_count = 0
         if msku_list:
             for group in target_groups:
@@ -419,6 +442,7 @@ def run_automation(msku_mapping_path, inventory_path, template_path, output_path
 
             updated_count = len([m for m in msku_list if m and m not in ("NONE", "NAN", "", "0")])
 
+        current_step = "saving output workbook"
         wb.save(output_path)
 
         logs.append(f"SUCCESS: Updated {updated_count} rows")
@@ -426,12 +450,14 @@ def run_automation(msku_mapping_path, inventory_path, template_path, output_path
         logs.append(f"  SKUs not in inventory: {len(missing_inventory_skus)}")
 
     except Exception as e:
-        logs.append(f"ERROR: {e}")
         import traceback
-        traceback.print_exc()
+        tb = traceback.format_exc()
+        logs.append(f"ERROR during '{current_step}': {type(e).__name__}: {e}")
+        logs.append(f"Traceback:\n{tb}")
         for log in logs:
             print(log)
-        raise e
+        # Re-raise with descriptive context so the frontend shows where it failed
+        raise Exception(f"[Step 3 / {current_step}] {type(e).__name__}: {e}") from e
 
     for log in logs:
         print(log)
