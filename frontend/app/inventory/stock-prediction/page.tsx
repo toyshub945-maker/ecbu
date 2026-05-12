@@ -111,79 +111,81 @@ function GenerateTemplatePanel({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   t: any;
 }) {
-  const [productNos, setProductNos] = useState("");
+  type ProductRow = { id: string; productNo: string; ordersPerDay: string };
+  const [rows, setRows] = useState<ProductRow[]>([{ id: uid(), productNo: "", ordersPerDay: String(dailyPrediction) }]);
   const [useAllUploads, setUseAllUploads] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [genSuccess, setGenSuccess] = useState<string | null>(null);
 
-  // Parse product numbers from the textarea (newlines or commas)
-  const parsedProducts = productNos
-    .split(/[\n,]+/)
-    .map(s => s.trim())
-    .filter(Boolean);
-  const isBatch = parsedProducts.length > 1;
+  const validRows = rows.filter(r => r.productNo.trim());
+  const isBatch = validRows.length > 1;
+
+  function addRow() {
+    setRows(prev => [...prev, { id: uid(), productNo: "", ordersPerDay: String(dailyPrediction) }]);
+  }
+  function removeRow(id: string) {
+    setRows(prev => prev.length > 1 ? prev.filter(r => r.id !== id) : prev);
+  }
+  function updateRow(id: string, field: keyof ProductRow, value: string) {
+    setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+  }
 
   async function handleGenerate() {
-    if (parsedProducts.length === 0) { setGenError("Please enter at least one product number"); return; }
+    if (validRows.length === 0) { setGenError("Please enter at least one product number"); return; }
     setGenerating(true);
     setGenError(null);
     setGenSuccess(null);
     try {
       const upload_ids = useAllUploads ? [] : [...selectedIds];
       const monthsPayload = months.map(m => ({ label: m.label, pct: m.pct }));
-
-      let res: Response;
+      let blob: Blob;
       let filename: string;
 
       if (isBatch) {
-        // Multi-product → single Excel with one tab per product
-        res = await fetch(backendUrl("/api/stock-prediction/batch-generate-template"), {
+        // Build per-product list with individual orders/day
+        const products = validRows.map(r => ({
+          product_no: r.productNo.trim(),
+          daily_prediction: parseFloat(r.ordersPerDay) || dailyPrediction,
+        }));
+        const res = await fetch(backendUrl("/api/stock-prediction/batch-generate-template"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            product_nos: parsedProducts,
-            daily_prediction: dailyPrediction,
+            products,
             prediction_days: predictionDays,
             months: monthsPayload,
             upload_ids,
           }),
         });
-        filename = `prediction_batch_${parsedProducts.length}products.xlsx`;
+        if (!res.ok) { const e = await res.json(); throw new Error(e.detail || "Generation failed"); }
+        blob = await res.blob();
+        filename = `prediction_batch_${validRows.length}products.xlsx`;
       } else {
-        // Single product
-        res = await fetch(backendUrl("/api/stock-prediction/generate-template"), {
+        const r = validRows[0];
+        const res = await fetch(backendUrl("/api/stock-prediction/generate-template"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            product_no: parsedProducts[0],
-            daily_prediction: dailyPrediction,
+            product_no: r.productNo.trim(),
+            daily_prediction: parseFloat(r.ordersPerDay) || dailyPrediction,
             prediction_days: predictionDays,
             months: monthsPayload,
             upload_ids,
           }),
         });
-        filename = `prediction_${parsedProducts[0]}.xlsx`;
+        if (!res.ok) { const e = await res.json(); throw new Error(e.detail || "Generation failed"); }
+        blob = await res.blob();
+        filename = `prediction_${r.productNo.trim()}.xlsx`;
       }
 
-      if (!res.ok) {
-        const e = await res.json();
-        throw new Error(e.detail || "Generation failed");
-      }
-      const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      setGenSuccess(isBatch
-        ? `✅ ${parsedProducts.length} products exported as separate tabs!`
-        : `✅ Template downloaded!`
-      );
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a); URL.revokeObjectURL(url);
+      setGenSuccess(isBatch ? `✅ ${validRows.length} products exported as separate tabs!` : `✅ Template downloaded!`);
       setTimeout(() => setGenSuccess(null), 4000);
     } catch (e: unknown) {
       setGenError(e instanceof Error ? e.message : "Generation failed");
@@ -197,59 +199,79 @@ function GenerateTemplatePanel({
       <h3 className={`text-sm font-bold ${t.t1} flex items-center gap-2`}>
         <span>📋</span> Generate Template
       </h3>
-      <p className={`text-[10px] ${t.t4}`}>
-        Enter one or more product numbers — one per line or comma-separated.
-        Multiple products export as separate tabs in one Excel file.
-      </p>
 
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <label className={`text-xs font-medium ${t.t3}`}>Product Numbers</label>
-          {parsedProducts.length > 0 && (
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-              isBatch ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"
-            }`}>
-              {isBatch ? `${parsedProducts.length} products → batch` : "1 product"}
-            </span>
-          )}
+      {/* Product rows table */}
+      <div className="space-y-1">
+        {/* Header */}
+        <div className="grid grid-cols-[1fr_80px_24px] gap-1.5 px-1">
+          <span className={`text-[10px] font-bold ${t.t4} uppercase tracking-wide`}>Product No.</span>
+          <span className={`text-[10px] font-bold ${t.t4} uppercase tracking-wide text-center`}>Orders/Day</span>
+          <span />
         </div>
-        <textarea
-          rows={4}
-          placeholder={"372\n340\n342\n426"}
-          value={productNos}
-          onChange={e => setProductNos(e.target.value)}
-          className={`w-full px-3 py-2 rounded-lg border ${t.divider} ${t.card} ${t.t1} text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none font-mono`}
-        />
+
+        {rows.map((row, idx) => (
+          <div key={row.id} className="grid grid-cols-[1fr_80px_24px] gap-1.5 items-center">
+            <input
+              type="text"
+              placeholder={`e.g. 372`}
+              value={row.productNo}
+              onChange={e => updateRow(row.id, "productNo", e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); if (idx === rows.length - 1) addRow(); } }}
+              className={`px-2 py-1.5 rounded-lg border ${t.divider} ${t.card} ${t.t1} text-xs focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono`}
+            />
+            <input
+              type="number"
+              min={1}
+              value={row.ordersPerDay}
+              onChange={e => updateRow(row.id, "ordersPerDay", e.target.value)}
+              className={`px-2 py-1.5 rounded-lg border ${t.divider} ${t.card} ${t.t1} text-xs text-center focus:outline-none focus:ring-2 focus:ring-amber-500`}
+            />
+            <button
+              onClick={() => removeRow(row.id)}
+              disabled={rows.length === 1}
+              className={`w-6 h-6 flex items-center justify-center rounded-md transition-colors ${
+                rows.length > 1 ? "text-red-400 hover:bg-red-50 hover:text-red-600" : "text-gray-200 cursor-not-allowed"
+              }`}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+        ))}
+
+        <button
+          onClick={addRow}
+          className={`w-full py-1.5 rounded-lg border border-dashed ${t.divider} ${t.t4} text-[11px] hover:border-amber-400 hover:text-amber-600 transition-colors flex items-center justify-center gap-1`}
+        >
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
+          </svg>
+          Add Product
+        </button>
       </div>
+
+      {validRows.length > 1 && (
+        <div className={`flex items-center gap-2 px-2 py-1.5 rounded-lg bg-amber-50 border border-amber-200`}>
+          <span className="text-amber-600 text-[10px] font-bold">📦 BATCH:</span>
+          <span className="text-amber-700 text-[10px]">{validRows.length} products → one file, separate tabs</span>
+        </div>
+      )}
 
       {/* ERP source selector */}
       {erpUploads.length > 0 && (
         <div className="space-y-1.5">
           <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={useAllUploads}
-              onChange={e => setUseAllUploads(e.target.checked)}
-              className="rounded"
-            />
+            <input type="checkbox" checked={useAllUploads} onChange={e => setUseAllUploads(e.target.checked)} className="rounded" />
             <span className={`text-xs ${t.t3}`}>Use all ERP uploads</span>
           </label>
           {!useAllUploads && (
-            <div className="space-y-1 pl-1 max-h-32 overflow-y-auto">
+            <div className="space-y-1 pl-1 max-h-28 overflow-y-auto">
               {erpUploads.map(u => (
                 <label key={u.id} className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(u.id)}
-                    onChange={e => {
-                      setSelectedIds(prev => {
-                        const n = new Set(prev);
-                        if (e.target.checked) n.add(u.id); else n.delete(u.id);
-                        return n;
-                      });
-                    }}
-                    className="rounded"
-                  />
+                  <input type="checkbox" checked={selectedIds.has(u.id)} onChange={e => {
+                    setSelectedIds(prev => { const n = new Set(prev); if (e.target.checked) n.add(u.id); else n.delete(u.id); return n; });
+                  }} className="rounded" />
                   <span className={`text-[11px] ${t.t2} truncate`}>{u.period_label}</span>
                   <span className={`text-[10px] ${t.t4} shrink-0`}>{u.sku_count} SKUs</span>
                 </label>
@@ -259,47 +281,29 @@ function GenerateTemplatePanel({
         </div>
       )}
 
-      {genError && (
-        <div className="p-2 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs">
-          {genError}
-        </div>
-      )}
-      {genSuccess && (
-        <div className="p-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-xs font-medium">
-          {genSuccess}
-        </div>
-      )}
+      {genError && <div className="p-2 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs">{genError}</div>}
+      {genSuccess && <div className="p-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-xs font-medium">{genSuccess}</div>}
 
       <button
         onClick={handleGenerate}
-        disabled={generating || parsedProducts.length === 0}
+        disabled={generating || validRows.length === 0}
         className={`w-full py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-          parsedProducts.length > 0 && !generating
+          validRows.length > 0 && !generating
             ? "bg-amber-500 hover:bg-amber-600 text-white shadow-md"
             : `${t.page} ${t.t4} cursor-not-allowed border ${t.divider}`
         }`}
       >
         {generating ? (
-          <>
-            <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-            </svg>
-            {isBatch ? `Generating ${parsedProducts.length} sheets…` : "Generating…"}
-          </>
+          <><svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+          {isBatch ? `Generating ${validRows.length} sheets…` : "Generating…"}</>
         ) : (
-          <>
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-            </svg>
-            {isBatch ? `Export ${parsedProducts.length} Products (Multi-Tab)` : "Generate & Download"}
-          </>
+          <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+          {isBatch ? `Export ${validRows.length} Products (Multi-Tab)` : "Generate & Download"}</>
         )}
       </button>
 
-      <div className={`text-[9px] ${t.t5} leading-relaxed`}>
-        Uses {dailyPrediction} orders/day × {predictionDays} days with {months.length} month allocations.
-        Data from ERP orders DB + Warehouse + Products.
+      <div className={`text-[9px] ${t.t5}`}>
+        {predictionDays} days × {months.length} month allocations · Orders/Day is per-product above
       </div>
     </div>
   );
