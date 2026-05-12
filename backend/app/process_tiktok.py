@@ -24,28 +24,108 @@ _MINIMAL_STYLES = b'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 </styleSheet>'''
 
 
+def _parse_shared_strings(xml_bytes):
+    """Parse xl/sharedStrings.xml → list of plain strings.
+    Handles plain <t> and rich-text <r><t> segments. Tolerates malformed XML."""
+    if not xml_bytes:
+        return []
+    try:
+        text = xml_bytes.decode('utf-8', errors='replace')
+    except Exception:
+        return []
+
+    si_re = re.compile(r'<si\b[^>]*>(.*?)</si>', re.DOTALL)
+    t_re = re.compile(r'<t\b[^>]*>(.*?)</t>', re.DOTALL)
+    strings = []
+    for si in si_re.finditer(text):
+        parts = t_re.findall(si.group(1))
+        # Combine all <t> segments inside this <si>
+        combined = "".join(parts)
+        # Unescape basic XML entities
+        combined = (combined.replace("&lt;", "<")
+                            .replace("&gt;", ">")
+                            .replace("&quot;", '"')
+                            .replace("&apos;", "'")
+                            .replace("&amp;", "&"))
+        strings.append(combined)
+    return strings
+
+
+def _xml_escape(s):
+    return (s.replace("&", "&amp;")
+             .replace("<", "&lt;")
+             .replace(">", "&gt;")
+             .replace('"', "&quot;"))
+
+
+# Match a single cell that uses shared-string lookup:
+#   <c r="A1" t="s" ...><v>42</v></c>
+# Capture: prefix attrs (before t=), suffix attrs (after t="s"), the index.
+_SHARED_CELL_RE = re.compile(
+    rb'<c\b([^>]*?)\s+t="s"([^>]*?)>\s*<v>\s*(\d+)\s*</v>\s*</c>',
+    re.DOTALL,
+)
+
+
+def _inline_shared_strings(sheet_xml: bytes, shared: list) -> bytes:
+    """Rewrite every <c t="s"><v>N</v></c> as an inline string cell so
+    openpyxl never has to consult the (possibly corrupt) shared-strings table."""
+
+    def repl(m):
+        before = m.group(1) or b""
+        after = m.group(2) or b""
+        try:
+            idx = int(m.group(3))
+        except Exception:
+            idx = -1
+        text = shared[idx] if 0 <= idx < len(shared) else ""
+        escaped = _xml_escape(text).encode("utf-8")
+        return (b'<c' + before + b' t="inlineStr"' + after + b'>'
+                + b'<is><t xml:space="preserve">' + escaped + b'</t></is>'
+                + b'</c>')
+
+    return _SHARED_CELL_RE.sub(repl, sheet_xml)
+
+
+# Minimal valid sharedStrings.xml (empty table)
+_MINIMAL_SHARED = b'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="0" uniqueCount="0"/>'''
+
+
 def _strip_xlsx(src_path, dest_path):
-    """Create a sanitized xlsx copy:
+    """Create a sanitized xlsx copy that openpyxl can always load:
+      - Inline all shared strings into the sheets (no more index lookups)
+      - Replace xl/sharedStrings.xml with an empty one
       - Replace xl/styles.xml with a minimal valid stylesheet
-      - Strip s="..." style references from every cell in every sheet
-      - Strip themeColor / numFmt references that may point to missing styles
-    This makes the workbook readable by openpyxl even if the source had
-    invalid XML or out-of-range style indices (common in TikTok templates).
+      - Strip s="..." style references from every cell
+    Cell *values* are preserved; only the (often broken) formatting
+    metadata is dropped.
     """
-    # Regex to strip style references inside cell tags
-    cell_style_re = re.compile(rb'(<c[^>]*?)\s+s="\d+"')
+    cell_style_re = re.compile(rb'(<c\b[^>]*?)\s+s="\d+"')
 
     with zipfile.ZipFile(src_path, 'r') as zin:
+        # Read shared strings first so we can inline them
+        shared_strings = []
+        try:
+            if 'xl/sharedStrings.xml' in zin.namelist():
+                shared_strings = _parse_shared_strings(
+                    zin.read('xl/sharedStrings.xml')
+                )
+        except Exception:
+            shared_strings = []
+
         with zipfile.ZipFile(dest_path, 'w', zipfile.ZIP_DEFLATED) as zout:
             for item in zin.infolist():
-                content = zin.read(item.filename)
                 fname = item.filename
+                content = zin.read(fname)
 
                 if fname == 'xl/styles.xml':
                     content = _MINIMAL_STYLES
+                elif fname == 'xl/sharedStrings.xml':
+                    content = _MINIMAL_SHARED
                 elif fname.startswith('xl/worksheets/') and fname.endswith('.xml'):
-                    # Strip cell-level style references so openpyxl
-                    # doesn't try to look them up in our minimal stylesheet
+                    # Inline shared strings, then strip style refs
+                    content = _inline_shared_strings(content, shared_strings)
                     content = cell_style_re.sub(rb'\1', content)
 
                 zout.writestr(fname, content)
