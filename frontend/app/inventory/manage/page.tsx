@@ -17,7 +17,31 @@ export default function WarehouseManagePage() {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [iframeLoading, setIframeLoading] = useState(true);
+  const [iframeError, setIframeError] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const FEISHU_URL = "https://h6uzyhsr1c.feishu.cn/sheets/OqPust3BwhHVp0taenDcqJtTnj3?from=wiki";
+  const FEISHU_LOGIN = "https://www.feishu.cn/";
+
+  const handleIframeLoad = (e: React.SyntheticEvent<HTMLIFrameElement>) => {
+    setIframeLoading(false);
+    // Try to detect if Feishu returned an error page (not logged in)
+    // We can't read cross-origin content, so we use a short timeout to check
+    // if the iframe is extremely small (error JSON) vs a real spreadsheet
+    try {
+      const iframe = e.currentTarget;
+      // If Feishu shows the error JSON, the document body will be very short
+      const doc = iframe.contentDocument || (iframe.contentWindow as any)?.document;
+      if (doc && doc.body) {
+        const text = doc.body.innerText?.trim() || "";
+        if (text.includes('"code":1') || text.includes('"msg":"Failed"')) {
+          setIframeError(true);
+        }
+      }
+    } catch {
+      // Cross-origin — can't read content, assume it loaded fine
+    }
+  };
 
   const fetchSummary = async () => {
     setLoading(true);
@@ -114,7 +138,8 @@ export default function WarehouseManagePage() {
       </div>
 
       <div className={`${t.card} rounded-2xl border ${t.divider} shadow-xl overflow-hidden relative group`}>
-        {iframeLoading && (
+        {/* Loading spinner */}
+        {iframeLoading && !iframeError && (
           <div className={`absolute inset-0 z-10 ${t.page} flex flex-col items-center justify-center gap-4`}>
             <div className="w-12 h-12 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin"></div>
             <div className="text-center">
@@ -123,29 +148,78 @@ export default function WarehouseManagePage() {
             </div>
           </div>
         )}
-        
-        <div className="absolute top-0 left-0 right-0 h-1 z-20 bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500"></div>
-        
+
+        {/* Feishu login required overlay */}
+        {iframeError && (
+          <div className="absolute inset-0 z-20 bg-gray-950/95 flex flex-col items-center justify-center gap-6 p-8">
+            <div className="w-16 h-16 rounded-full bg-amber-500/20 flex items-center justify-center">
+              <svg className="w-8 h-8 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m0 0v2m0-2h2m-2 0H10m2-5V7m0 0V5m0 2h2M12 7H10M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="text-center max-w-md">
+              <h3 className="text-white text-xl font-bold mb-2">Feishu Login Required</h3>
+              <p className="text-gray-400 text-sm leading-relaxed">
+                You need to be logged in to your Feishu account to view the warehouse spreadsheet.
+                Please log in to Feishu first, then come back to this page.
+              </p>
+            </div>
+            <div className="flex gap-3 flex-wrap justify-center">
+              <a
+                href={FEISHU_LOGIN}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                </svg>
+                Log in to Feishu
+              </a>
+              <button
+                onClick={() => { setIframeError(false); setIframeLoading(true); }}
+                className="px-6 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-semibold transition-colors"
+              >
+                Retry
+              </button>
+              <a
+                href={FEISHU_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-6 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
+              >
+                Open in New Tab
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </a>
+            </div>
+          </div>
+        )}
+
+        <div className="absolute top-0 left-0 right-0 h-1 z-30 bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500"></div>
+
         <iframe
-          src="https://h6uzyhsr1c.feishu.cn/sheets/OqPust3BwhHVp0taenDcqJtTnj3?from=wiki"
+          key={iframeError ? "retry" : "main"}
+          src={FEISHU_URL}
           className="w-full border-none"
-          style={{ height: 'calc(100vh - 250px)', opacity: iframeLoading ? 0 : 1 }}
+          style={{ height: 'calc(100vh - 250px)', opacity: (iframeLoading || iframeError) ? 0 : 1 }}
           title="Feishu Spreadsheet"
           allowFullScreen
           allow="clipboard-read; clipboard-write; self; same-origin"
-          onLoad={() => setIframeLoading(false)}
+          onLoad={handleIframeLoad}
         />
-        
+
         <div className={`p-3 border-t ${t.divider} ${t.page}/50 flex items-center justify-between px-6`}>
           <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+            <div className={`w-1.5 h-1.5 rounded-full ${iframeError ? "bg-amber-400" : "bg-green-500"}`}></div>
             <span className={`text-[10px] font-bold ${t.t3} uppercase tracking-widest`}>
-              Live Bi-directional Sync Active
+              {iframeError ? "Feishu Login Required" : "Live Bi-directional Sync Active"}
             </span>
           </div>
-          <a 
-            href="https://h6uzyhsr1c.feishu.cn/sheets/OqPust3BwhHVp0taenDcqJtTnj3?from=wiki" 
-            target="_blank" 
+          <a
+            href={FEISHU_URL}
+            target="_blank"
             rel="noopener noreferrer"
             className="text-[10px] font-black text-blue-600 hover:text-blue-800 flex items-center gap-1.5 transition-colors uppercase tracking-widest"
           >
