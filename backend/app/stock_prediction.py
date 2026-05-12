@@ -496,8 +496,22 @@ def generate_template_excel(
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         cell.border = thin
 
+    # ── Sort SKUs by numeric size suffix (6 → 6.5 → 7 → … → 10) ────────────────
+    def _sku_size_key(s: dict) -> float:
+        """Extract the trailing numeric size from a SKU string for natural sorting.
+        e.g. 'RS24A17894-black-7.5' → 7.5,  'ABC-10' → 10.0,  'XYZ' → 0.0
+        """
+        sku = s.get("sku", "")
+        part = sku.rsplit("-", 1)[-1]
+        try:
+            return float(part)
+        except ValueError:
+            return 0.0
+
+    sorted_skus = sorted(skus, key=_sku_size_key)
+
     # ── Rows 3+: data ──────────────────────────────────────────────────────────
-    for s in skus:
+    for s in sorted_skus:
         quota = s["total_orders"] / grand_total if grand_total > 0 else 0
         expected = daily_prediction * prediction_days * quota
 
