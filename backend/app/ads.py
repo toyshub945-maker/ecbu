@@ -187,7 +187,9 @@ def get_ads_by_store(store_name: str | None = None, date_start: str | None = Non
         
         if search:
             query += " AND (product_number LIKE ? OR notes LIKE ?)"
-            params.append(f"%{search}%")
+            like = f"%{search}%"
+            params.append(like)
+            params.append(like)
         
         query += " ORDER BY date DESC, id DESC"
         
