@@ -5,9 +5,10 @@ import { useTheme } from "@/components/ThemeProvider";
 import { api } from "@/lib/api";
 
 function backendUrl(path: string) {
-  if (typeof window === "undefined") return `http://localhost:8000${path}`;
-  const h = window.location.hostname;
-  // Use the actual host only for localhost or LAN IPs; Vercel/external → always localhost
+  if (process.env.NEXT_PUBLIC_BACKEND_URL) {
+    return `${process.env.NEXT_PUBLIC_BACKEND_URL}${path}`;
+  }
+  const h = typeof window !== "undefined" ? window.location.hostname : "localhost";
   const host = (h === "localhost" || /^127\./.test(h) || /^192\.168\./.test(h) || /^10\./.test(h)) ? h : "localhost";
   return `http://${host}:8000${path}`;
 }
@@ -160,8 +161,10 @@ export default function AdsPage() {
       if (activeTab !== "All") params.append("store", activeTab);
       if (searchTerm) params.append("search", searchTerm);
       const res = await fetch(backendUrl(`/api/ads?${params}`));
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setAds(data.ads || []);
+      setError("");
     } catch (e) {
       setError("Failed to load ads data");
     } finally {
