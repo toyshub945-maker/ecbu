@@ -5,6 +5,7 @@ services:
     env_file: .env
     environment:
       - DATA_DIR=/data
+      - PORT=8000
     volumes:
       - ./data:/data
     ports:
