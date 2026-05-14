@@ -155,6 +155,9 @@ export default function Sidebar() {
           <NavItem href="/ads" active={pathname.startsWith("/ads")} icon="📈" t={t}>
             Ads Management
           </NavItem>
+          <NavItem href="/design" active={pathname.startsWith("/design")} icon="✦" t={t}>
+            Design Studio
+          </NavItem>
           <NavItem href="/settings" active={pathname === "/settings"} icon="⚙️" t={t}>
             Settings
           </NavItem>

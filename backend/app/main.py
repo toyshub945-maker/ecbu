@@ -22,12 +22,14 @@ from . import warehouse
 from . import ads
 from . import stock_prediction as sp
 from . import erp_orders as erp
+from . import design as design_module
 
 db.init_db()
 auth.ensure_admin_exists()
 
 app = FastAPI(title="Workflow Dashboard", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.include_router(design_module.router)
 
 
 # ─── Health ──────────────────────────────────────────────────────────────────
